@@ -7,6 +7,8 @@ export 'systems/tween.dart';
 export 'systems/joint2d.dart';
 export 'systems/verlet.dart';
 export 'systems/scene_manager.dart';
+export 'systems/state_machine.dart';
+export 'systems/event_bus.dart';
 export 'graph/audio_node.dart';
 export 'graph/node.dart';
 export 'graph/scene.dart';

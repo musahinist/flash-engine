@@ -14,6 +14,7 @@ import 'examples/particle_demo.dart';
 import 'examples/tween_demo.dart';
 import 'examples/joint_demo.dart';
 import 'examples/scene_demo.dart';
+import 'examples/state_machine_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -187,6 +188,14 @@ class ExampleMenu extends StatelessWidget {
                         icon: Icons.layers,
                         onTap: () =>
                             Navigator.push(context, MaterialPageRoute(builder: (_) => const SceneManagerDemoExample())),
+                      ),
+                      const SizedBox(height: 20),
+                      _ExampleCard(
+                        title: 'State & Events',
+                        description: 'State machine transitions and global event bus.',
+                        icon: Icons.account_tree_rounded,
+                        onTap: () =>
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const StateMachineDemoExample())),
                       ),
                     ],
                   ),
