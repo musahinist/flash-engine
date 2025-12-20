@@ -17,7 +17,7 @@ class _AudioDemoState extends State<AudioDemo> {
   void initState() {
     super.initState();
     // Gravity pointing down (-Y)
-    _physicsWorld = FlashPhysicsWorld(gravity: -50.0);
+    _physicsWorld = FlashPhysicsWorld(gravity: v.Vector2(0, -50.0));
   }
 
   @override

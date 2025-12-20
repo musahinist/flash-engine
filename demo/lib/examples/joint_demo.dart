@@ -33,7 +33,7 @@ class _JointDemoExampleState extends State<JointDemoExample> {
   }
 
   void _initForge2D() {
-    _physicsWorld = FlashPhysicsWorld(gravity: 10);
+    _physicsWorld = FlashPhysicsWorld(gravity: v.Vector2(0, -9.81));
     const chainLength = 8;
     const linkSize = 20.0;
     FlashPhysicsBody? prevBody;
@@ -41,7 +41,7 @@ class _JointDemoExampleState extends State<JointDemoExample> {
     for (int i = 0; i < chainLength; i++) {
       final bodyDef = f2d.BodyDef()
         ..type = i == 0 ? f2d.BodyType.static : f2d.BodyType.dynamic
-        ..position = v.Vector2(0, i * linkSize);
+        ..position = v.Vector2(0, FlashPhysics.toMeters(-i * linkSize));
 
       final body = _physicsWorld.world.createBody(bodyDef);
       body.createFixture(
@@ -57,7 +57,7 @@ class _JointDemoExampleState extends State<JointDemoExample> {
         FlashRevoluteJoint2D(
           bodyA: prevBody,
           bodyB: physicsBody,
-          anchorWorldPoint: v.Vector2(0, (i - 0.5) * linkSize),
+          anchorWorldPoint: v.Vector2(0, FlashPhysics.toMeters(-(i - 0.5) * linkSize)),
         ).create(_physicsWorld);
       }
       prevBody = physicsBody;
@@ -65,7 +65,7 @@ class _JointDemoExampleState extends State<JointDemoExample> {
 
     final bobDef = f2d.BodyDef()
       ..type = f2d.BodyType.dynamic
-      ..position = v.Vector2(0, chainLength * linkSize);
+      ..position = v.Vector2(0, FlashPhysics.toMeters(-chainLength * linkSize));
     final bobBody = _physicsWorld.world.createBody(bobDef);
     bobBody.createFixture(
       f2d.FixtureDef(f2d.CircleShape()..radius = 20)
@@ -79,7 +79,7 @@ class _JointDemoExampleState extends State<JointDemoExample> {
       FlashRevoluteJoint2D(
         bodyA: _chainBodies.last,
         bodyB: _pendulumBob,
-        anchorWorldPoint: v.Vector2(0, (chainLength - 0.5) * linkSize),
+        anchorWorldPoint: v.Vector2(0, FlashPhysics.toMeters(-(chainLength - 0.5) * linkSize)),
       ).create(_physicsWorld);
     }
   }
@@ -250,14 +250,14 @@ class _Forge2DPainter extends CustomPainter {
     for (int i = 0; i < chain.length; i++) {
       final p = chain[i].body.position;
       if (i == 0) {
-        path.moveTo(cx + p.x * scale, cy + p.y * scale);
+        path.moveTo(cx + p.x * scale, cy - p.y * scale);
       } else {
-        path.lineTo(cx + p.x * scale, cy + p.y * scale);
+        path.lineTo(cx + p.x * scale, cy - p.y * scale);
       }
     }
 
     final bp = bob.body.position;
-    final bx = cx + bp.x * scale, by = cy + bp.y * scale;
+    final bx = cx + bp.x * scale, by = cy - bp.y * scale;
     path.lineTo(bx, by);
 
     canvas.drawPath(
@@ -281,7 +281,7 @@ class _Forge2DPainter extends CustomPainter {
 
     for (int i = 0; i < chain.length; i++) {
       final p = chain[i].body.position;
-      canvas.drawCircle(Offset(cx + p.x * scale, cy + p.y * scale), i == 0 ? 12 : 7, Paint()..color = Colors.white);
+      canvas.drawCircle(Offset(cx + p.x * scale, cy - p.y * scale), i == 0 ? 12 : 7, Paint()..color = Colors.white);
     }
 
     canvas.drawCircle(Offset(bx, by), 28, Paint()..color = Colors.orangeAccent);

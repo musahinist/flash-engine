@@ -15,6 +15,7 @@ import 'examples/tween_demo.dart';
 import 'examples/joint_demo.dart';
 import 'examples/scene_demo.dart';
 import 'examples/state_machine_demo.dart';
+import 'examples/collision_layers_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -196,6 +197,16 @@ class ExampleMenu extends StatelessWidget {
                         icon: Icons.account_tree_rounded,
                         onTap: () =>
                             Navigator.push(context, MaterialPageRoute(builder: (_) => const StateMachineDemoExample())),
+                      ),
+                      const SizedBox(height: 20),
+                      _ExampleCard(
+                        title: 'Collision Layers',
+                        description: 'Filtering interactions between different object groups.',
+                        icon: Icons.filter_center_focus_rounded,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CollisionLayersDemoExample()),
+                        ),
                       ),
                     ],
                   ),

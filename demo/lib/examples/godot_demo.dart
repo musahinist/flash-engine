@@ -18,7 +18,7 @@ class _GodotDemoState extends State<GodotDemo> {
   @override
   void initState() {
     super.initState();
-    _physicsWorld = FlashPhysicsWorld(gravity: -500.0);
+    _physicsWorld = FlashPhysicsWorld(gravity: v.Vector2(0, -500.0));
     _loadSprite();
   }
 

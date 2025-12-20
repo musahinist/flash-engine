@@ -20,7 +20,7 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
   @override
   void initState() {
     super.initState();
-    physicsWorld = FlashPhysicsWorld(gravity: -500);
+    physicsWorld = FlashPhysicsWorld(gravity: FlashPhysics.standardGravity);
     _createGround();
     for (int i = 0; i < 10; i++) {
       _addRandomBox();
@@ -28,10 +28,11 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
   }
 
   void _createGround() {
-    final shape = f2d.PolygonShape()..setAsBox(400, 20, v.Vector2.zero(), 0);
+    final shape = f2d.PolygonShape()
+      ..setAsBox(FlashPhysics.toMeters(400), FlashPhysics.toMeters(20), v.Vector2.zero(), 0);
     final bodyDef = f2d.BodyDef()
       ..type = f2d.BodyType.static
-      ..position = v.Vector2(0, -400);
+      ..position = v.Vector2(0, FlashPhysics.toMeters(-400));
 
     final body = physicsWorld.world.createBody(bodyDef);
     body.createFixture(f2d.FixtureDef(shape)..friction = 0.5);
@@ -47,10 +48,11 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
     final x = (random.nextDouble() - 0.5) * 400;
     final y = 400 + (random.nextDouble() * 400);
 
-    final shape = f2d.PolygonShape()..setAsBox(size / 2, size / 2, v.Vector2.zero(), 0);
+    final shape = f2d.PolygonShape()
+      ..setAsBox(FlashPhysics.toMeters(size / 2), FlashPhysics.toMeters(size / 2), v.Vector2.zero(), 0);
     final bodyDef = f2d.BodyDef()
       ..type = f2d.BodyType.dynamic
-      ..position = v.Vector2(x, y)
+      ..position = v.Vector2(FlashPhysics.toMeters(x), FlashPhysics.toMeters(y))
       ..angularVelocity = (random.nextDouble() - 0.5) * 5;
 
     final body = physicsWorld.world.createBody(bodyDef);
