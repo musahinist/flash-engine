@@ -31,7 +31,8 @@ class FlashPhysicsSystem extends f2d.ContactListener {
 
   FlashPhysicsSystem({v.Vector2? gravity})
     : gravity = gravity ?? FlashPhysics.standardGravity,
-      world = f2d.World((gravity ?? FlashPhysics.standardGravity)) {
+      // Gravity is assumed to be in m/s^2. No conversion needed for Forge2D world.
+      world = f2d.World(f2d.Vector2(gravity?.x ?? 0.0, gravity?.y ?? -9.81)) {
     world.setContactListener(this);
   }
 

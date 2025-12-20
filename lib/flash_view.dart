@@ -17,6 +17,11 @@ class Flash extends StatefulWidget {
 
   final VoidCallback? onUpdate;
 
+  /// If true, Flash will automatically trigger a rebuild of its child
+  /// on every engine tick (60 FPS). Useful for simple declarative animations
+  /// without needing an AnimationController or setState manually.
+  final bool autoUpdate;
+
   const Flash({
     super.key,
     required this.child,
@@ -24,6 +29,7 @@ class Flash extends StatefulWidget {
     this.showDebugOverlay = true,
     this.enableInputCapture = true,
     this.onUpdate,
+    this.autoUpdate = true,
   });
 
   @override
@@ -66,6 +72,17 @@ class _FlashState extends State<Flash> {
     if (widget.physicsWorld != oldWidget.physicsWorld) {
       engine.physicsWorld = widget.physicsWorld;
     }
+    if (widget.onUpdate != oldWidget.onUpdate) {
+      engine.onUpdate = () {
+        widget.onUpdate?.call();
+        final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+        if (now - _lastDebugUpdate > 0.5) {
+          int totalNodes = _countNodes(engine.scene);
+          _debugInfo.value = '${engine.fps.toStringAsFixed(1)} FPS | $totalNodes Nodes';
+          _lastDebugUpdate = now;
+        }
+      };
+    }
   }
 
   @override
@@ -76,82 +93,89 @@ class _FlashState extends State<Flash> {
     super.dispose();
   }
 
+  Widget _buildContent(BuildContext context, BoxConstraints constraints) {
+    // Update engine viewport size
+    engine.viewportSize.setValues(constraints.maxWidth, constraints.maxHeight);
+
+    // Core content with painting
+    Widget content = Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        SizedBox.expand(
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: FlashPainter(engine: engine, camera: engine.activeCamera, repaint: engine),
+              child: widget.child,
+            ),
+          ),
+        ),
+        // Debug Overlay
+        if (widget.showDebugOverlay)
+          Positioned(
+            right: 20,
+            top: 40,
+            child: ValueListenableBuilder<String>(
+              valueListenable: _debugInfo,
+              builder: (context, info, _) {
+                if (info.isEmpty) return const SizedBox.shrink();
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    info,
+                    style: const TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+
+    // Conditionally wrap with input handling
+    if (widget.enableInputCapture) {
+      content = Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          engine.input.handleKeyEvent(event);
+          return KeyEventResult.handled;
+        },
+        child: Listener(
+          onPointerDown: engine.input.onPointerDown,
+          onPointerUp: engine.input.onPointerUp,
+          onPointerMove: engine.input.onPointerMove,
+          onPointerHover: engine.input.onPointerHover,
+          onPointerCancel: engine.input.onPointerCancel,
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              engine.input.onPointerScroll(event);
+            }
+          },
+          child: content,
+        ),
+      );
+    }
+
+    return InheritedFlashNode(node: engine.scene, engine: engine, child: content);
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Update engine viewport size before building children
-        engine.viewportSize.setValues(constraints.maxWidth, constraints.maxHeight);
-
-        // Core content with painting
-        Widget content = Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            SizedBox.expand(
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  painter: FlashPainter(engine: engine, camera: engine.activeCamera, repaint: engine),
-                  child: widget.child,
-                ),
-              ),
-            ),
-            // Debug Overlay
-            if (widget.showDebugOverlay)
-              Positioned(
-                right: 20,
-                top: 40,
-                child: ValueListenableBuilder<String>(
-                  valueListenable: _debugInfo,
-                  builder: (context, info, _) {
-                    if (info.isEmpty) return const SizedBox.shrink();
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        info,
-                        style: const TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        );
-
-        // Conditionally wrap with input handling
-        if (widget.enableInputCapture) {
-          content = Focus(
-            autofocus: true,
-            onKeyEvent: (node, event) {
-              engine.input.handleKeyEvent(event);
-              return KeyEventResult.handled;
-            },
-            child: Listener(
-              onPointerDown: engine.input.onPointerDown,
-              onPointerUp: engine.input.onPointerUp,
-              onPointerMove: engine.input.onPointerMove,
-              onPointerHover: engine.input.onPointerHover,
-              onPointerCancel: engine.input.onPointerCancel,
-              onPointerSignal: (event) {
-                if (event is PointerScrollEvent) {
-                  engine.input.onPointerScroll(event);
-                }
-              },
-              child: content,
-            ),
-          );
+        if (widget.autoUpdate) {
+          return ListenableBuilder(listenable: engine, builder: (context, _) => _buildContent(context, constraints));
         }
-
-        return InheritedFlashNode(node: engine.scene, engine: engine, child: content);
+        return _buildContent(context, constraints);
       },
     );
   }

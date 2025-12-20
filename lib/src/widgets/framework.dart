@@ -69,11 +69,22 @@ abstract class FlashNodeWidgetState<T extends FlashNodeWidget, N extends FlashNo
 
   @mustCallSuper
   void applyProperties([T? oldWidget]) {
-    node.name = widget.name ?? node.name;
-    if (widget.position != null) node.transform.position = widget.position!;
-    if (widget.rotation != null) node.transform.rotation = widget.rotation!;
-    if (widget.scale != null) node.transform.scale = widget.scale!;
-    node.billboard = widget.billboard;
+    if (widget.name != oldWidget?.name) node.name = widget.name ?? node.name;
+
+    // Only apply transform properties if they've actually changed in the widget.
+    // This prevents overwriting runtime-calculated properties (like physics) on every build.
+    if (widget.position != null && (oldWidget == null || widget.position != oldWidget.position)) {
+      node.transform.position = widget.position!;
+    }
+    if (widget.rotation != null && (oldWidget == null || widget.rotation != oldWidget.rotation)) {
+      node.transform.rotation = widget.rotation!;
+    }
+    if (widget.scale != null && (oldWidget == null || widget.scale != oldWidget.scale)) {
+      node.transform.scale = widget.scale!;
+    }
+    if (widget.billboard != oldWidget?.billboard) {
+      node.billboard = widget.billboard;
+    }
   }
 
   @override

@@ -13,7 +13,6 @@ class RenderingDemoExample extends StatefulWidget {
 
 class _RenderingDemoExampleState extends State<RenderingDemoExample> {
   final List<v.Vector3> _pathPoints = [];
-  double _time = 0;
   late final FlashPhysicsSystem _physicsWorld;
 
   @override
@@ -23,10 +22,16 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
     _generateWavyPath();
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   void _generateWavyPath() {
-    for (int i = 0; i < 30; i++) {
-      final x = (i - 15) * 20.0;
-      final y = sin(i * 0.3) * 50.0;
+    _pathPoints.clear();
+    for (int i = 0; i < 40; i++) {
+      final x = (i - 20) * 50.0;
+      final y = sin(i * 0.4) * 80.0;
       _pathPoints.add(v.Vector3(x, y, 0));
     }
   }
@@ -39,26 +44,19 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
       extendBodyBehindAppBar: true,
       body: Flash(
         physicsWorld: _physicsWorld,
-        onUpdate: () {
-          setState(() {
-            _time += 1 / 60.0;
-          });
-        },
+        autoUpdate: true, // Now this is all we need!
         child: Stack(
           children: [
-            // Camera (Optimized for mobile visibility)
-            FlashCamera(position: v.Vector3(0, 0, 1200), fov: 60, far: 5000),
+            FlashCamera(position: v.Vector3(0, 0, 1800), fov: 60, far: 5000),
 
-            // No need for FlashPhysicsSystem, passed directly to Flash
-
-            // 1. LINE RENDERER: Static Wavy Path (Now with Collision!)
+            // 1. LINE RENDERER: Ground
             FlashRigidBody(
               name: 'WavyFloor',
-              position: v.Vector3(0, -150, 0),
+              position: v.Vector3(0, -300, 0),
               bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
               fixtures: [
                 f2d.FixtureDef(f2d.ChainShape()..createChain(_pathPoints.map((p) => f2d.Vector2(p.x, p.y)).toList()))
-                  ..restitution = 1.0,
+                  ..restitution = 0.8,
               ],
               child: FlashLineRenderer(
                 name: 'WavyPath',
@@ -69,41 +67,45 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
               ),
             ),
 
-            // 2. LINE RENDERER: Animated Circle (Orbit)
-            FlashNodeGroup(
-              position: v.Vector3(0, 150, 0),
-              rotation: v.Vector3(0, 0, _time * 2), // Faster rotation
-              child: FlashLineRenderer(
-                name: 'CirclePath',
-                points: _generateCirclePoints(100, 32),
-                isLoop: true,
-                width: 10, // Increased width
-                color: Colors.white24,
-              ),
+            // 2. LINE RENDERER: Pulsing Orbit
+            Builder(
+              builder: (context) {
+                final orbitRotation = (DateTime.now().millisecondsSinceEpoch / 1000.0) * 1.5;
+                return FlashNodeGroup(
+                  position: v.Vector3(0, 200, 0),
+                  rotation: v.Vector3(0, 0, orbitRotation),
+                  scale: v.Vector3.all(0.8 + sin(orbitRotation) * 0.2),
+                  child: FlashLineRenderer(
+                    name: 'CirclePath',
+                    points: _generateCirclePoints(150, 4),
+                    isLoop: true,
+                    width: 12,
+                    color: Colors.white24,
+                  ),
+                );
+              },
             ),
 
             // 3. TRAIL RENDERER: Bouncing Physics Ball
             FlashRigidBody(
               name: 'TrailBall',
-              position: v.Vector3(0, 300, 0),
+              position: v.Vector3(-300, 500, 0),
               bodyDef: f2d.BodyDef()
                 ..type = f2d.BodyType.dynamic
-                ..bullet =
-                    true // Prevent tunneling
-                ..linearVelocity = f2d.Vector2(50, -100), // Slow fall to waves
+                ..bullet = true
+                ..linearVelocity = f2d.Vector2(400, -200),
               fixtures: [
-                f2d.FixtureDef(f2d.CircleShape()..radius = 25) // Slightly larger
+                f2d.FixtureDef(f2d.CircleShape()..radius = 30)
                   ..density = 1.0
-                  ..restitution =
-                      1.0 // Maximum bounce
-                  ..friction = 0.0,
+                  ..restitution = 0.95
+                  ..friction = 0.1,
               ],
               child: FlashNodes(
                 children: [
-                  FlashCircle(radius: 25, color: Colors.orangeAccent),
+                  FlashCircle(radius: 30, color: Colors.orangeAccent),
                   const FlashTrailRenderer(
-                    lifetime: 1.2, // Longer trail
-                    startWidth: 20,
+                    lifetime: 1.5,
+                    startWidth: 25,
                     endWidth: 0,
                     startColor: Colors.orangeAccent,
                     endColor: Colors.transparent,
@@ -112,48 +114,38 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
               ),
             ),
 
-            // 4. OLD FLOOR REMOVED (The wavy line is the floor now)
-
-            // 5. SIDE WALLS (Brought closer for mobile screens)
+            // Side Walls
             Builder(
               builder: (context) {
-                final engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()?.engine;
-                if (engine == null) return const SizedBox.shrink();
+                final engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()!.engine;
+                final camera = engine.activeCamera;
+                if (camera == null) return const SizedBox.shrink();
+                final bounds = camera.getWorldBounds(camera.transform.position.z.abs(), engine.viewportSize);
+                final wallX = bounds.x;
 
-                return ListenableBuilder(
-                  listenable: engine,
-                  builder: (context, _) {
-                    final camera = engine.activeCamera;
-                    if (camera == null) return const SizedBox.shrink();
-
-                    final bounds = camera.getWorldBounds(camera.transform.position.z.abs(), engine.viewportSize);
-                    final wallX = bounds.x; // Exact edge
-
-                    return FlashNodes(
-                      children: [
-                        FlashRigidBody(
-                          name: 'LeftWall',
-                          position: v.Vector3(-wallX - 10, 0, 0),
-                          bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
-                          fixtures: [
-                            f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
-                              ..restitution = 1.0,
-                          ],
-                          child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                        ),
-                        FlashRigidBody(
-                          name: 'RightWall',
-                          position: v.Vector3(wallX + 10, 0, 0),
-                          bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
-                          fixtures: [
-                            f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
-                              ..restitution = 1.0,
-                          ],
-                          child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                        ),
+                return FlashNodes(
+                  children: [
+                    FlashRigidBody(
+                      name: 'LeftWall',
+                      position: v.Vector3(-wallX - 10, 0, 0),
+                      bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
+                      fixtures: [
+                        f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
+                          ..restitution = 1.0,
                       ],
-                    );
-                  },
+                      child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.1)),
+                    ),
+                    FlashRigidBody(
+                      name: 'RightWall',
+                      position: v.Vector3(wallX + 10, 0, 0),
+                      bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
+                      fixtures: [
+                        f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
+                          ..restitution = 1.0,
+                      ],
+                      child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.1)),
+                    ),
+                  ],
                 );
               },
             ),
@@ -165,8 +157,8 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _debugInfo('LineRenderer:', 'Static path with glow & gradient', Colors.cyanAccent),
-                  _debugInfo('TrailRenderer:', 'Dynamic movement trail on physics body', Colors.orangeAccent),
+                  _debugInfo('LineRenderer:', 'Pulsing square orbit', Colors.cyanAccent),
+                  _debugInfo('TrailRenderer:', 'Dynamic ball with physics', Colors.orangeAccent),
                 ],
               ),
             ),

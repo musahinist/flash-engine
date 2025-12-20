@@ -40,23 +40,20 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
       appBar: AppBar(title: const Text('Tween Animation Demo'), backgroundColor: Colors.transparent, elevation: 0),
       extendBodyBehindAppBar: true,
       body: Flash(
+        autoUpdate: true,
+        onUpdate: () {
+          final dt = 1 / 60.0;
+          for (int i = _activeTweens.length - 1; i >= 0; i--) {
+            _activeTweens[i].update(dt);
+            if (_activeTweens[i].isCompleted) {
+              _activeTweens.removeAt(i);
+            }
+          }
+        },
         child: Builder(
           builder: (context) {
             final engineWidget = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>();
             final engine = engineWidget?.engine;
-
-            if (engine != null) {
-              engine.onUpdate = () {
-                final dt = 1 / 60.0;
-                for (int i = _activeTweens.length - 1; i >= 0; i--) {
-                  _activeTweens[i].update(dt);
-                  if (_activeTweens[i].isCompleted) {
-                    _activeTweens.removeAt(i);
-                  }
-                }
-                setState(() {});
-              };
-            }
 
             return Stack(
               children: [
