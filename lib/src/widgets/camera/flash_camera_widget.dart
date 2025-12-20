@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/rendering/camera.dart';
+import '../../core/systems/engine.dart';
 import '../framework.dart';
 
 class FlashCameraWidget extends FlashNodeWidget {
@@ -24,6 +25,8 @@ class FlashCameraWidget extends FlashNodeWidget {
 }
 
 class _FlashCameraWidgetState extends FlashNodeWidgetState<FlashCameraWidget, FlashCamera> {
+  FlashEngine? _engine; // Cache engine reference for safe disposal
+
   @override
   FlashCamera createNode() => FlashCamera()
     ..fov = widget.fov
@@ -33,16 +36,15 @@ class _FlashCameraWidgetState extends FlashNodeWidgetState<FlashCameraWidget, Fl
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Register camera with engine for O(1) lookup
-    final engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()?.engine;
-    engine?.registerCamera(node);
+    // Cache engine reference and register camera
+    _engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()?.engine;
+    _engine?.registerCamera(node);
   }
 
   @override
   void dispose() {
-    // Unregister camera when widget is disposed
-    final engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()?.engine;
-    engine?.unregisterCamera(node);
+    // Use cached engine reference (safe during disposal)
+    _engine?.unregisterCamera(node);
     super.dispose();
   }
 
