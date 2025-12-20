@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:vector_math/vector_math_64.dart';
 import '../graph/node.dart';
 import '../systems/particle.dart';
 import '../systems/engine.dart';
@@ -20,8 +21,8 @@ class FlashPainter extends CustomPainter {
 
     // Viewport Matrix: Map NDC [-1, 1] to Screen [0, width], [0, height]
     final viewportMatrix = Matrix4.identity()
-      ..translate(size.width / 2, size.height / 2)
-      ..scale(size.width / 2, -size.height / 2, 1.0);
+      ..setTranslationRaw(size.width / 2, size.height / 2, 0.0)
+      ..scaleByVector3(Vector3(size.width / 2, -size.height / 2, 1.0));
 
     // Use active camera or fallback
     final activeCam = camera ?? FlashCameraNode(name: 'PainterFallback');
