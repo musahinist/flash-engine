@@ -24,8 +24,8 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
   }
 
   void _generateWavyPath() {
-    for (int i = 0; i < 50; i++) {
-      final x = (i - 25) * 20.0;
+    for (int i = 0; i < 30; i++) {
+      final x = (i - 15) * 20.0;
       final y = sin(i * 0.3) * 50.0;
       _pathPoints.add(v.Vector3(x, y, 0));
     }
@@ -46,8 +46,8 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
         },
         child: Stack(
           children: [
-            // Camera (Moved back for wider view)
-            FlashCamera(position: v.Vector3(0, 0, 1000), fov: 60),
+            // Camera (Optimized for mobile visibility)
+            FlashCamera(position: v.Vector3(0, 0, 1200), fov: 60, far: 5000),
 
             // No need for FlashPhysicsSystem, passed directly to Flash
 
@@ -114,24 +114,48 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
 
             // 4. OLD FLOOR REMOVED (The wavy line is the floor now)
 
-            // 5. SIDE WALLS (Widened to accommodate the wavy line width)
-            FlashRigidBody(
-              name: 'LeftWall',
-              position: v.Vector3(-550, 0, 0),
-              bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
-              fixtures: [
-                f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 600, f2d.Vector2.zero(), 0))..restitution = 1.0,
-              ],
-              child: FlashBox(width: 40, height: 1200, color: Colors.cyanAccent.withValues(alpha: 0.1)),
-            ),
-            FlashRigidBody(
-              name: 'RightWall',
-              position: v.Vector3(550, 0, 0),
-              bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
-              fixtures: [
-                f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 600, f2d.Vector2.zero(), 0))..restitution = 1.0,
-              ],
-              child: FlashBox(width: 40, height: 1200, color: Colors.cyanAccent.withValues(alpha: 0.1)),
+            // 5. SIDE WALLS (Brought closer for mobile screens)
+            Builder(
+              builder: (context) {
+                final engine = context.dependOnInheritedWidgetOfExactType<InheritedFlashNode>()?.engine;
+                if (engine == null) return const SizedBox.shrink();
+
+                return ListenableBuilder(
+                  listenable: engine,
+                  builder: (context, _) {
+                    final camera = engine.activeCamera;
+                    if (camera == null) return const SizedBox.shrink();
+
+                    final bounds = camera.getWorldBounds(camera.transform.position.z.abs(), engine.viewportSize);
+                    final wallX = bounds.x; // Exact edge
+
+                    return FlashNodes(
+                      children: [
+                        FlashRigidBody(
+                          name: 'LeftWall',
+                          position: v.Vector3(-wallX - 10, 0, 0),
+                          bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
+                          fixtures: [
+                            f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
+                              ..restitution = 1.0,
+                          ],
+                          child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                        ),
+                        FlashRigidBody(
+                          name: 'RightWall',
+                          position: v.Vector3(wallX + 10, 0, 0),
+                          bodyDef: f2d.BodyDef()..type = f2d.BodyType.static,
+                          fixtures: [
+                            f2d.FixtureDef(f2d.PolygonShape()..setAsBox(20, 1000, f2d.Vector2.zero(), 0))
+                              ..restitution = 1.0,
+                          ],
+                          child: FlashBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
 
             // Legend

@@ -1,15 +1,15 @@
 import 'package:flutter/widgets.dart';
 import '../graph/node.dart';
-import '../graph/scene.dart';
 import '../systems/particle.dart';
+import '../systems/engine.dart';
 import 'camera.dart';
 import 'light.dart';
 
 class FlashPainter extends CustomPainter {
-  final FlashScene scene;
+  final FlashEngine engine;
   final FlashCameraNode? camera;
 
-  FlashPainter({required this.scene, required this.camera, super.repaint});
+  FlashPainter({required this.engine, required this.camera, super.repaint});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -29,7 +29,7 @@ class FlashPainter extends CustomPainter {
     final List<FlashNode> flatList = [];
     final List<FlashLightNode> lights = [];
     final List<FlashParticleEmitter> emitters = [];
-    _collectNodes(scene, flatList, lights, emitters);
+    _collectNodes(engine.scene, flatList, lights, emitters);
 
     // Z-Sorting (Painter's Algorithm)
     flatList.sort((a, b) {
@@ -54,7 +54,7 @@ class FlashPainter extends CustomPainter {
     List<FlashLightNode> lights,
     List<FlashParticleEmitter> emitters,
   ) {
-    if (node != scene) {
+    if (node != engine.scene) {
       if (node is FlashLightNode) {
         lights.add(node);
       } else if (node is FlashParticleEmitter) {

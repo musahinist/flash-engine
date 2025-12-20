@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
 import '../graph/scene.dart';
 import '../rendering/camera.dart';
 import '../systems/physics.dart';
@@ -14,6 +15,9 @@ class FlashEngine extends ChangeNotifier {
   final FlashInputSystem input = FlashInputSystem();
   final FlashSceneManager sceneManager = FlashSceneManager();
   final FlashTweenManager tweenManager = FlashTweenManager();
+
+  /// Current viewport size in pixels
+  v.Vector2 viewportSize = v.Vector2(0, 0);
 
   FlashCameraNode? activeCamera;
   FlashPhysicsSystem? physicsWorld;
