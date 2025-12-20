@@ -1,10 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
-import '../graph/node.dart';
 import '../systems/particle.dart';
 import '../systems/engine.dart';
 import 'camera.dart';
-import 'light.dart';
 
 class FlashPainter extends CustomPainter {
   final FlashEngine engine;
@@ -30,10 +28,9 @@ class FlashPainter extends CustomPainter {
     final viewMatrix = activeCam.getViewMatrix();
     final cameraMatrix = viewportMatrix * projectionMatrix * viewMatrix;
 
-    final List<FlashNode> flatList = [];
-    final List<FlashLightNode> lights = [];
-    final List<FlashParticleEmitter> emitters = [];
-    _collectNodes(engine.scene, flatList, lights, emitters);
+    final flatList = engine.renderNodes;
+    final lights = engine.lights;
+    final emitters = engine.emitters;
 
     // Z-Sorting (Painter's Algorithm)
     flatList.sort((a, b) {
@@ -49,26 +46,6 @@ class FlashPainter extends CustomPainter {
     // Render particles (after regular nodes for proper layering)
     for (final emitter in emitters) {
       _renderParticles(canvas, cameraMatrix, emitter);
-    }
-  }
-
-  void _collectNodes(
-    FlashNode node,
-    List<FlashNode> list,
-    List<FlashLightNode> lights,
-    List<FlashParticleEmitter> emitters,
-  ) {
-    if (node != engine.scene) {
-      if (node is FlashLightNode) {
-        lights.add(node);
-      } else if (node is FlashParticleEmitter) {
-        emitters.add(node);
-      } else {
-        list.add(node);
-      }
-    }
-    for (final child in node.children) {
-      _collectNodes(child, list, lights, emitters);
     }
   }
 

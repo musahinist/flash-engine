@@ -16,8 +16,8 @@ class _AudioDemoState extends State<AudioDemo> {
   @override
   void initState() {
     super.initState();
-    // Gravity pointing down (-Y)
-    _physicsWorld = FlashPhysicsSystem(gravity: v.Vector2(0, -50.0));
+    // Standard gravity (m/s^2), pointing down
+    _physicsWorld = FlashPhysicsSystem(gravity: v.Vector2(0, -9.81));
   }
 
   @override
@@ -32,73 +32,94 @@ class _AudioDemoState extends State<AudioDemo> {
       appBar: AppBar(title: const Text('Physics Audio Collision'), backgroundColor: Colors.transparent),
       body: Flash(
         physicsWorld: _physicsWorld,
+        autoUpdate: true,
         child: Stack(
           children: [
-            // Floor (Static)
+            FlashCamera(position: v.Vector3(0, 0, 800), fov: 60),
+
+            // Floor
             FlashRigidBody(
-              bodyDef: BodyDef()
-                ..type = BodyType.static
-                ..position = Vector2(0, -100),
-              fixtures: [
-                FixtureDef(PolygonShape()..setAsBoxXY(200, 10))
-                  ..restitution =
-                      0.5 // Bouncy
-                  ..friction = 0.3,
-              ],
-              child: FlashBox(name: 'Floor', scale: v.Vector3(400, 20, 50), color: Colors.blueGrey),
+              position: v.Vector3(0, -200, 0),
+              bodyDef: BodyDef()..type = BodyType.static,
+              fixtures: [FixtureDef(PolygonShape()..setAsBoxXY(400, 10))..friction = 0.0],
+              child: FlashBox(name: 'Floor', width: 800, height: 20, color: Colors.grey),
             ),
 
-            // Falling Boxes
-            _buildFallingBox(v.Vector3(0, 100, 0), Colors.redAccent),
-            _buildFallingBox(v.Vector3(50, 150, 0), Colors.amberAccent),
-            _buildFallingBox(v.Vector3(-50, 200, 0), Colors.cyanAccent),
+            // Left Wall
+            FlashRigidBody(
+              position: v.Vector3(-400, 0, 0),
+              bodyDef: BodyDef()..type = BodyType.static,
+              fixtures: [FixtureDef(PolygonShape()..setAsBoxXY(10, 200))..restitution = 1.0],
+              child: FlashBox(name: 'LeftWall', width: 20, height: 400, color: Colors.grey),
+            ),
+
+            // Right Wall
+            FlashRigidBody(
+              position: v.Vector3(400, 0, 0),
+              bodyDef: BodyDef()..type = BodyType.static,
+              fixtures: [FixtureDef(PolygonShape()..setAsBoxXY(10, 200))..restitution = 1.0],
+              child: FlashBox(name: 'RightWall', width: 20, height: 400, color: Colors.grey),
+            ),
+
+            // Slider A (Moving Right)
+            _buildSliderBox(position: v.Vector3(-200, -170, 0), velocity: v.Vector2(300, 0), color: Colors.cyanAccent),
+
+            // Slider B (Moving Left)
+            _buildSliderBox(position: v.Vector3(200, -170, 0), velocity: v.Vector2(-300, 0), color: Colors.pinkAccent),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFallingBox(v.Vector3 position, Color color) {
+  Widget _buildSliderBox({required v.Vector3 position, required v.Vector2 velocity, required Color color}) {
     final controller = FlashAudioController();
     Body? bodyRef;
+    int lastPlayTime = 0;
+    const int cooldownMs = 200; // Prevent spamming sounds (max 5 per second)
 
     return FlashRigidBody(
       position: position,
       bodyDef: BodyDef()
         ..type = BodyType.dynamic
-        ..linearDamping = 1.0
-        ..angularDamping = 1.0
-        ..position = Vector2(position.x, position.y),
+        ..linearVelocity = velocity
+        ..fixedRotation =
+            true // prevent tumbling
+        ..linearDamping =
+            0.0 // no air resistance
+        ..angularDamping = 0.0,
       fixtures: [
-        FixtureDef(PolygonShape()..setAsBoxXY(10, 10))
+        FixtureDef(PolygonShape()..setAsBoxXY(20, 20))
           ..density = 1.0
-          ..restitution = 0.8
-          ..friction = 0.4,
+          ..restitution =
+              1.0 // Perfectly elastic bounce
+          ..friction = 0.0, // No friction logic on floor
       ],
       onCollision: (contact) {
-        // Only play if the body is moving fast enough (impact)
-        // This prevents sound when resting or sliding slowly
-        if (bodyRef != null && bodyRef!.linearVelocity.length > 2.0) {
+        if (bodyRef != null) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (now - lastPlayTime < cooldownMs) return;
+
+          // Play sound on impact
+          // For elastic collision, velocity direction changes but magnitude stays similar.
+          // Just verify we hit something
           controller.play();
+          lastPlayTime = now;
         }
       },
       onUpdate: (body) {
         bodyRef = body;
-        // Stop audio if body is effectively stationary
-        if (body.linearVelocity.length < 1.0) {
-          controller.stop();
-        }
       },
       child: Stack(
         children: [
-          FlashBox(scale: v.Vector3(20, 20, 20), color: color),
+          FlashBox(width: 40, height: 40, color: color),
           FlashAudioPlayer(
             assetPath: 'asset/demo.mp3',
             controller: controller,
             autoplay: false,
-            is3D: true,
-            minDistance: 50,
-            maxDistance: 1000,
+            is3D: false, // Temporarily disable 3D to rule out distance issues
+            // minDistance: 50,
+            // maxDistance: 1000,
           ),
         ],
       ),

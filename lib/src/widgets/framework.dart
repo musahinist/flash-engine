@@ -11,7 +11,7 @@ class InheritedFlashNode extends InheritedWidget {
   const InheritedFlashNode({required this.node, required this.engine, required super.child, super.key});
 
   @override
-  bool updateShouldNotify(InheritedFlashNode oldWidget) => true;
+  bool updateShouldNotify(InheritedFlashNode oldWidget) => oldWidget.node != node || oldWidget.engine != engine;
 }
 
 /// Base class for all declarative Flash widgets.

@@ -93,7 +93,12 @@ class FlashPhysicsBody extends FlashNode {
   void update(double dt) {
     onUpdate?.call(body);
     super.update(dt);
-    _syncFromPhysics();
+
+    // valid check for body disposal or if world is locked?
+    // body.isActive check is important
+    if (body.isActive && body.isAwake) {
+      _syncFromPhysics();
+    }
   }
 
   void _syncFromPhysics() {

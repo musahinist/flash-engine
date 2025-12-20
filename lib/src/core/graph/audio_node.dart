@@ -42,6 +42,8 @@ class FlashAudioNode extends FlashNode {
   // we rely on declarative widget to trigger init, OR we add lazy init in update.
 
   Future<void> initialize(FlashAudioSystem system) async {
+    if (_source != null) return; // Already initialized
+
     _system = system;
     _lastPosition = worldPosition.clone();
     await system.ready; // Wait for initialization
@@ -54,23 +56,26 @@ class FlashAudioNode extends FlashNode {
   Future<void> play() async {
     if (_source == null || _system == null) return;
     // For polyphony we just add a new handle
+    try {
+      final handle = await _system!.play(
+        _source!,
+        loop: loop,
+        volume: volume,
+        position: is3D ? worldPosition : null,
+        paused: false, // We will set params while playing? Or should pause?
+        // Better to pause if possible, but system.play sets paused:true then false.
+        // So effectively it starts immediately.
+      );
 
-    final handle = await _system!.play(
-      _source!,
-      loop: loop,
-      volume: volume,
-      position: is3D ? worldPosition : null,
-      paused: false, // We will set params while playing? Or should pause?
-      // Better to pause if possible, but system.play sets paused:true then false.
-      // So effectively it starts immediately.
-    );
+      if (is3D) {
+        _system!.set3dMinMaxDistance(handle, minDistance, maxDistance);
+        // _system!.set3dAttenuation(handle, 2, 1.0); // Exponential
+      }
 
-    if (is3D) {
-      _system!.set3dMinMaxDistance(handle, minDistance, maxDistance);
-      // _system!.set3dAttenuation(handle, 2, 1.0); // Exponential
+      _handles.add(handle);
+    } catch (e) {
+      print('Error playing sound $assetPath: $e');
     }
-
-    _handles.add(handle);
   }
 
   void stop() {

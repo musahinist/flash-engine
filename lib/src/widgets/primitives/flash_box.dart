@@ -42,6 +42,10 @@ class _BoxNode extends FlashNode {
   double height;
   Color color;
 
+  final Paint _paint = Paint();
+  Color? _lastColor;
+  double _lastBrightness = -1.0;
+
   _BoxNode({required this.width, required this.height, required this.color});
 
   @override
@@ -51,10 +55,6 @@ class _BoxNode extends FlashNode {
 
     if (lights.isNotEmpty) {
       final worldPos = worldPosition;
-      // Normal of the rect in world space.
-      // Assuming initial normal is (0, 0, 1) locally?
-      // A 2D rect usually faces Z axis in 2D plane (XY plane). Normal is +Z.
-      // So forward vector is correct.
       final normal = worldMatrix.forward..normalize();
 
       for (final light in lights) {
@@ -68,34 +68,28 @@ class _BoxNode extends FlashNode {
     }
 
     brightness = brightness.clamp(0.0, 1.0);
-    final drawColor = Color.from(
-      alpha: color.a,
-      red: color.r * brightness,
-      green: color.g * brightness,
-      blue: color.b * brightness,
-    );
+
+    // Update paint if color or brightness changed
+    if (color != _lastColor || brightness != _lastBrightness) {
+      _lastColor = color;
+      _lastBrightness = brightness;
+      _paint.color = Color.from(
+        alpha: color.a,
+        red: color.r * brightness,
+        green: color.g * brightness,
+        blue: color.b * brightness,
+      );
+    }
 
     // Draw centered rect with width/height
+    // Reuse Rect? Since width/height might change rarely, we could cache it, but Rect creation is cheap.
+    // However, recreating Rect every frame is what we want to avoid if possible.
+    // But width/height are mutable. Let's just create Rect here, it's a struct basically.
+    // Paint is the heavy one.
     final rect = Rect.fromCenter(center: Offset.zero, width: width, height: height);
-    final paint = Paint()..color = drawColor;
-    canvas.drawRect(rect, paint);
-
-    // Optional: Draw border for visibility (scaled relative to size?)
-    // If width/height is 1.0, border 0.05 is visible.
-    // If width/height is 400, border 0.05 is tiny.
-    // Let's make border optional or logic based?
-    // For "Physics Demo", visual clarity is helpful.
-    // Fixed strokeWidth might disappear at scale.
-    // We'll keep it simple for now or remove border if lighting handles depth.
-    // Lighting handles visual cue. I'll remove border for cleaner look,
-    // or make it proportional.
-    // Users preferred generic primitives without borders usually.
-    /*
-    final border = Paint()
-      ..color = Colors.black.withValues(alpha: 0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.min(width, height) * 0.02;
-    canvas.drawRect(rect, border);
-    */
+    canvas.drawRect(rect, _paint);
   }
+
+  @override
+  Rect? get bounds => Rect.fromCenter(center: Offset.zero, width: width, height: height);
 }

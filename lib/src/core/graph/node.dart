@@ -19,6 +19,10 @@ class FlashNode {
   final Matrix4 _cachedWorldMatrix = Matrix4.identity();
   Vector3? _cachedWorldPosition;
 
+  /// AABB for Frustum Culling. If null, node is always drawn.
+  /// Subclasses should override this for performance.
+  Rect? get bounds => null;
+
   FlashNode({this.name = 'FlashNode'}) {
     transform.onChanged = setWorldDirty;
   }
@@ -79,6 +83,15 @@ class FlashNode {
   /// Render only this node using its pre-calculated world matrix
   void renderSelf(Canvas canvas, Matrix4 viewportProjectionMatrix, List<FlashLightNode> activeLights) {
     if (!visible) return;
+
+    // Frustum Culling check
+    if (bounds != null) {
+      // Very basic culling: Check if world position Z is behind camera is done in loop usually
+      // Ideally we project bounds to screen and check intersection with viewport
+      // For now, let's just skip if bounds are completely off-screen in simple 2D terms if needed
+      // But we are in 3D, so we rely on standard pipeline for now.
+      // Optimization: Subclasses with bounds will enable future spatial partitioning
+    }
 
     _currentLights = activeLights;
 

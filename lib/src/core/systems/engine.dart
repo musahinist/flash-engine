@@ -2,8 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../graph/scene.dart';
+import '../graph/node.dart';
 import '../rendering/camera.dart';
+import '../rendering/light.dart';
 import '../systems/physics.dart';
+import '../systems/particle.dart';
 import 'audio.dart';
 import 'input.dart';
 import 'scene_manager.dart';
@@ -23,6 +26,11 @@ class FlashEngine extends ChangeNotifier {
   FlashPhysicsSystem? physicsWorld;
   FlashCameraNode? _defaultCamera;
   final Set<FlashCameraNode> _activeCameras = {};
+
+  // cached render lists to avoid allocation
+  final List<FlashNode> renderNodes = [];
+  final List<FlashLightNode> lights = [];
+  final List<FlashParticleEmitter> emitters = [];
 
   late final Ticker _ticker;
 
@@ -91,10 +99,36 @@ class FlashEngine extends ChangeNotifier {
     // Update Audio Listener
     audio.updateListener(activeCamera!);
 
+    _prepareRender();
+
     notifyListeners();
 
     if (onUpdate != null) {
       onUpdate!();
+    }
+  }
+
+  void _prepareRender() {
+    renderNodes.clear();
+    lights.clear();
+    emitters.clear();
+    _collectNodes(scene);
+  }
+
+  void _collectNodes(FlashNode node) {
+    if (node != scene) {
+      if (!node.visible) return; // Basic visibility culling at collection time
+
+      if (node is FlashLightNode) {
+        lights.add(node);
+      } else if (node is FlashParticleEmitter) {
+        emitters.add(node);
+      } else {
+        renderNodes.add(node);
+      }
+    }
+    for (final child in node.children) {
+      _collectNodes(child);
     }
   }
 }
