@@ -134,14 +134,13 @@ class FlashRopeJoint extends FlashJoint {
 
   @override
   void update(double dt) {
-    // Update anchor position if connected to nodeA
+    // Update anchor position if connected to nodeA (takes priority)
     if (nodeA != null && points.isNotEmpty) {
       points.first.position = nodeA!.worldPosition;
       points.first.oldPosition = points.first.position.clone();
-    } else if (anchorA != null && points.isNotEmpty) {
-      points.first.position = anchorA!;
-      points.first.oldPosition = points.first.position.clone();
     }
+    // Note: If using movePoint(), anchorA is NOT used to override position
+    // anchorA is only for initial positioning
 
     // Update end anchor if connected to nodeB
     if (nodeB != null && points.length > 1) {
