@@ -383,7 +383,7 @@ class ParticleEmitterConfig {
 
 /// Particle emitter node (High Performance Native Version)
 class FlashParticleEmitter extends FlashNode {
-  final Pointer<ParticleEmitter> _nativeEmitter;
+  late final Pointer<ParticleEmitter> _nativeEmitter;
   final int maxParticles;
   final Random _random = Random();
 
@@ -393,8 +393,11 @@ class FlashParticleEmitter extends FlashNode {
 
   FlashParticleEmitter({ParticleEmitterConfig? config, this.emitting = true, super.name = 'ParticleEmitter'})
     : config = config ?? ParticleEmitterConfig(),
-      maxParticles = config?.maxParticles ?? 1000,
-      _nativeEmitter = calloc<ParticleEmitter>() {
+      maxParticles = config?.maxParticles ?? 1000 {
+    // Ensure native core is initialized
+    FlashNativeParticles.init();
+    _nativeEmitter = calloc<ParticleEmitter>();
+
     // Allocate shared memory for particles
     _nativeEmitter.ref.particles = calloc<NativeParticle>(maxParticles);
     _nativeEmitter.ref.maxParticles = maxParticles;

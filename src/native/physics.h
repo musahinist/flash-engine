@@ -42,6 +42,14 @@ struct ContactManifold {
     int active; // Using int for stable FFI alignment
 };
 
+struct NativeJoint {
+    int type; // 0 = Distance Joint
+    uint32_t bodyA;
+    uint32_t bodyB;
+    float targetDistance;
+    float impulse;
+};
+
 struct PhysicsWorld {
     NativeBody* bodies;
     int maxBodies;
@@ -54,6 +62,10 @@ struct PhysicsWorld {
     ContactManifold* manifolds;
     int maxManifolds;
     int activeManifolds;
+
+    NativeJoint* joints;
+    int maxJoints;
+    int activeJoints;
 };
 
 PhysicsWorld* create_physics_world(int maxBodies);
@@ -64,6 +76,7 @@ void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy);
 void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque);
 void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy);
 void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y);
+int32_t create_joint(PhysicsWorld* world, int type, uint32_t bodyA, uint32_t bodyB, float distance);
 
 }
 

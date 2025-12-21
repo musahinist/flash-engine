@@ -19,18 +19,18 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
     // Add a native emitter with high particle count
     final emitter = FlashParticleEmitter(
       config: ParticleEmitterConfig(
-        maxParticles: 2000000,
-        emissionRate: 200000, // Balanced emission to fill 2M
+        maxParticles: 500000,
+        emissionRate: 100000, // Balanced for 500k
         lifetimeMin: 1.0,
-        lifetimeMax: 5.0,
+        lifetimeMax: 4.0,
         velocityMin: v.Vector3(-400, -400, -400),
         velocityMax: v.Vector3(400, 400, 400),
-        gravity: v.Vector3(0, 0, 0), // Zero gravity for balanced scattering
-        sizeMin: 1,
-        sizeMax: 2,
+        gravity: v.Vector3(0, 50, 0), // Slight drift
+        sizeMin: 2,
+        sizeMax: 5, // Larger to see the quads
         startColor: Colors.cyanAccent,
-        endColor: Colors.purpleAccent.withOpacity(0),
-        spreadAngle: 3.14159, // Full sphere distribution
+        endColor: Colors.purpleAccent.withValues(alpha: 0),
+        spreadAngle: 3.14159,
       ),
       name: 'MegaStressEmitter',
     );

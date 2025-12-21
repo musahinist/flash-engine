@@ -65,8 +65,8 @@ void fill_chunk_pass1(ParticleEmitter* emitter, float* m, ThreadWork& work) {
 }
 
 void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, const ThreadWork& work, int globalOffset) {
-    int vPtr = globalOffset * 3 * 2;
-    int cPtr = globalOffset * 3;
+    int vPtr = globalOffset * 18 * 2;
+    int cPtr = globalOffset * 18;
 
     for (int idx : work.visibleIndices) {
         NativeParticle& p = emitter->particles[idx];
@@ -76,16 +76,33 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
         float screenY = (p.x * m[1] + p.y * m[5] + p.z * m[9] + m[13]) * invW;
         
         float halfSize = (p.size * p.life * invW * 500.0f);
-        if (halfSize < 0.5f) halfSize = 0.5f;
+        if (halfSize < 0.2f) halfSize = 0.2f;
         if (halfSize > 50.0f) halfSize = 50.0f;
         
-        vertices[vPtr++] = screenX; vertices[vPtr++] = screenY - halfSize;
-        vertices[vPtr++] = screenX - halfSize; vertices[vPtr++] = screenY + halfSize;
-        vertices[vPtr++] = screenX + halfSize; vertices[vPtr++] = screenY + halfSize;
-        
+        // Hexagon constants (for rounder shapes)
+        // Cos/Sin for 0, 60, 120, 180, 240, 300 degrees
+        static const float hx[] = {1.0f, 0.5f, -0.5f, -1.0f, -0.5f, 0.5f};
+        static const float hy[] = {0.0f, 0.866f, 0.866f, 0.0f, -0.866f, -0.866f};
+
         uint32_t alpha = (uint32_t)(p.life * 255.0f);
         uint32_t col = (p.color & 0x00FFFFFF) | (alpha << 24);
-        colors[cPtr++] = col; colors[cPtr++] = col; colors[cPtr++] = col;
+
+        for (int i = 0; i < 6; ++i) {
+            int next = (i + 1) % 6;
+            // Center
+            vertices[vPtr++] = screenX; 
+            vertices[vPtr++] = screenY;
+            // Point 1
+            vertices[vPtr++] = screenX + hx[i] * halfSize;
+            vertices[vPtr++] = screenY + hy[i] * halfSize;
+            // Point 2
+            vertices[vPtr++] = screenX + hx[next] * halfSize;
+            vertices[vPtr++] = screenY + hy[next] * halfSize;
+
+            colors[cPtr++] = col;
+            colors[cPtr++] = col;
+            colors[cPtr++] = col;
+        }
     }
 }
 

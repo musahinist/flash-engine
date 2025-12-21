@@ -53,9 +53,9 @@ class FlashPainter extends CustomPainter {
     }
   }
 
-  // Native buffers for 2M particles to avoid GC pressure and allow C++ access
-  static final Pointer<Float> _verticesPtr = calloc<Float>(2000000 * 3 * 2);
-  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(2000000 * 3);
+  // Native buffers for 500k particles to save memory (Hexagons)
+  static final Pointer<Float> _verticesPtr = calloc<Float>(500000 * 18 * 2);
+  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(500000 * 18);
   static final Pointer<Float> _matrixPtr = calloc<Float>(16);
 
   void _renderParticles(Canvas canvas, Matrix4 cameraMatrix, FlashParticleEmitter emitter) {
@@ -73,13 +73,13 @@ class FlashPainter extends CustomPainter {
     final fillFunc = FlashNativeParticles.fillVertexBuffer;
     if (fillFunc == null) return;
 
-    final renderedCount = fillFunc(emitter.nativeEmitterPointer, _matrixPtr, _verticesPtr, _colorsPtr, 2000000);
+    final renderedCount = fillFunc(emitter.nativeEmitterPointer, _matrixPtr, _verticesPtr, _colorsPtr, 500000);
 
     if (renderedCount > 0) {
       final vertices = ui.Vertices.raw(
         ui.VertexMode.triangles,
-        _verticesPtr.asTypedList(renderedCount * 3 * 2),
-        colors: _colorsPtr.cast<Int32>().asTypedList(renderedCount * 3),
+        _verticesPtr.asTypedList(renderedCount * 18 * 2),
+        colors: _colorsPtr.cast<Int32>().asTypedList(renderedCount * 18),
       );
 
       canvas.drawVertices(vertices, BlendMode.srcOver, Paint());

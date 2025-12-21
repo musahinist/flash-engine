@@ -22,9 +22,12 @@ class FlashPhysicsSystem {
   final int maxBodies;
 
   FlashPhysicsSystem({v.Vector2? gravity, this.maxBodies = 1000}) {
+    // Ensure native core is initialized before creating the world
+    FlashNativeParticles.init();
+
     final createFunc = FlashNativeParticles.createPhysicsWorld;
     if (createFunc == null) {
-      throw StateError('Native core not initialized. Call FlashEngine.start() first.');
+      throw StateError('FlashPhysicsSystem: Failed to initialize native physics core.');
     }
     world = createFunc(maxBodies);
 
