@@ -1,4 +1,3 @@
-import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../systems/audio.dart';
 import '../graph/node.dart';
@@ -55,26 +54,27 @@ class FlashAudioNode extends FlashNode {
 
   Future<void> play() async {
     if (_source == null || _system == null) return;
-    // For polyphony we just add a new handle
+
+    // Prune invalid handles
+    _handles.removeWhere((h) => !_system!.isValidHandle(h));
+
     try {
       final handle = await _system!.play(
         _source!,
         loop: loop,
         volume: volume,
         position: is3D ? worldPosition : null,
-        paused: false, // We will set params while playing? Or should pause?
-        // Better to pause if possible, but system.play sets paused:true then false.
-        // So effectively it starts immediately.
+        paused: false,
       );
 
-      if (is3D) {
-        _system!.set3dMinMaxDistance(handle, minDistance, maxDistance);
-        // _system!.set3dAttenuation(handle, 2, 1.0); // Exponential
-      }
-
       _handles.add(handle);
+
+      // Initial 3D update
+      if (is3D) {
+        _system!.setSourceAttributes(handle, worldPosition, minDistance, maxDistance);
+      }
     } catch (e) {
-      print('Error playing sound $assetPath: $e');
+      print('Error playing sound: $e');
     }
   }
 
@@ -83,8 +83,8 @@ class FlashAudioNode extends FlashNode {
       for (final handle in _handles) {
         _system!.stop(handle);
       }
-      _handles.clear();
     }
+    _handles.clear();
   }
 
   bool get isPlaying => _handles.isNotEmpty;
@@ -92,17 +92,11 @@ class FlashAudioNode extends FlashNode {
   @override
   void update(double dt) {
     super.update(dt);
-    if (is3D && _system != null) {
-      // Calculate velocity
-      final velocity = (dt > 0) ? (worldPosition - _lastPosition) / dt : Vector3.zero();
-      _lastPosition = worldPosition.clone();
 
-      // Prune invalid handles (finished sounds)
-      _handles.removeWhere((h) => !_system!.isValidHandle(h));
-
-      // Update position and velocity for remaining handles
+    if (_system != null && is3D) {
+      final pos = worldPosition;
       for (final handle in _handles) {
-        _system!.update3DSource(handle, worldPosition, velocity);
+        _system!.setSourceAttributes(handle, pos, minDistance, maxDistance);
       }
     }
   }

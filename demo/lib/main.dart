@@ -1,3 +1,4 @@
+import 'package:demo/examples/rendering_demo.dart';
 import 'package:flutter/material.dart';
 import 'examples/basic_scene.dart';
 import 'examples/solar_system.dart';
@@ -14,7 +15,7 @@ import 'examples/joint_demo.dart';
 import 'examples/scene_demo.dart';
 import 'examples/state_machine_demo.dart';
 import 'examples/collision_layers_demo.dart';
-import 'examples/rendering_demo.dart';
+import 'examples/three_d_audio_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -90,6 +91,12 @@ class ExampleMenu extends StatelessWidget {
         description: 'Spatial SoLoud audio.',
         icon: Icons.surround_sound_rounded,
         builder: (_) => const AudioDemo(),
+      ),
+      _ExampleData(
+        title: '3D Audio Orbit',
+        description: 'Moving listener demo.',
+        icon: Icons.spatial_audio_off_rounded,
+        builder: (_) => const ThreeDAudioDemo(),
       ),
       _ExampleData(
         title: 'Input System',

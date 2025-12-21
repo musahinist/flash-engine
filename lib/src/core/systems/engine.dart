@@ -62,7 +62,18 @@ class FlashEngine extends ChangeNotifier {
 
   void stop() {
     _ticker.stop();
+    // Do NOT dispose audio here if we want to restart?
+    // But stop() is called by Flash.dispose().
+    // We should clean up scene first
+    scene.dispose(); // Stops all audio nodes
     audio.dispose();
+  }
+
+  @override
+  void dispose() {
+    stop();
+    _ticker.dispose();
+    super.dispose();
   }
 
   void _tick(Duration elapsed) {

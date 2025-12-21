@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
   vector_math: ^2.1.4
   forge2d: ^0.10.0
-  flutter_soloud: ^3.4.7
+  audioplayers: ^6.0.0
 
 dev_dependencies:
   flutter_test:
