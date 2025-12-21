@@ -17,11 +17,7 @@ class _ThreeDAudioDemoState extends State<ThreeDAudioDemo> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('3D Audio Demo'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('3D Audio Demo'), backgroundColor: Colors.transparent, elevation: 0),
       body: Flash(
         autoUpdate: true,
         child: Builder(
@@ -43,10 +39,7 @@ class _ThreeDAudioDemoState extends State<ThreeDAudioDemo> {
 
             return Stack(
               children: [
-                FlashCamera(
-                  position: v.Vector3(cameraX, cameraY, cameraZ + 400),
-                  fov: 60,
-                ),
+                FlashCamera(position: v.Vector3(cameraX, cameraY, cameraZ + 400), fov: 60),
 
                 // Center marker
                 FlashSphere(position: v.Vector3(0, 0, 0), radius: 10, color: Colors.white),
