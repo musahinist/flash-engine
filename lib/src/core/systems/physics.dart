@@ -44,6 +44,29 @@ class FlashPhysicsSystem {
     }
   }
 
+  /// Enable or disable warm starting for faster convergence
+  void setWarmStarting(bool enabled) {
+    world.ref.enableWarmStarting = enabled ? 1 : 0;
+  }
+
+  /// Configure contact constraint softness
+  /// [hertz] - Contact frequency in Hz (default: 30)
+  /// [dampingRatio] - Damping ratio 0-1 (default: 0.8)
+  void setContactTuning(double hertz, double dampingRatio) {
+    world.ref.contactHertz = hertz;
+    world.ref.contactDampingRatio = dampingRatio;
+  }
+
+  /// Set maximum linear velocity for stability (in pixels/s)
+  void setMaxLinearVelocity(double maxVelocity) {
+    world.ref.maxLinearVelocity = maxVelocity;
+  }
+
+  /// Set restitution threshold (minimum velocity for bounce, in pixels/s)
+  void setRestitutionThreshold(double threshold) {
+    world.ref.restitutionThreshold = threshold;
+  }
+
   void dispose() {
     final destroyFunc = FlashNativeParticles.destroyPhysicsWorld;
     if (destroyFunc != null) {
@@ -98,6 +121,12 @@ class FlashPhysicsBody extends FlashNode {
 
   void applyTorque(double torque) {
     FlashNativeParticles.applyTorque!(_world, bodyId, torque);
+  }
+
+  /// Enable continuous collision detection for fast-moving bodies
+  void setBullet(bool isBullet) {
+    final bodyPtr = _world.ref.bodies.elementAt(bodyId);
+    bodyPtr.ref.isBullet = isBullet ? 1 : 0;
   }
 
   void _syncFromPhysics() {

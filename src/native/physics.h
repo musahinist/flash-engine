@@ -17,6 +17,37 @@ enum ShapeType {
     SHAPE_BOX = 1
 };
 
+// Softness parameters for spring-damped constraints (Box2D-inspired)
+struct Softness {
+    float biasRate;      // Bias velocity coefficient
+    float massScale;     // Mass scale for soft constraints
+    float impulseScale;  // Impulse scale for warm starting
+};
+
+// Contact constraint point with accumulated impulses
+struct ContactConstraintPoint {
+    float anchorAx, anchorAy;  // Contact point relative to body A
+    float anchorBx, anchorBy;  // Contact point relative to body B
+    float baseSeparation;      // Initial separation distance
+    float normalImpulse;       // Accumulated normal impulse
+    float tangentImpulse;      // Accumulated tangent impulse
+    float normalMass;          // Effective mass in normal direction
+    float tangentMass;         // Effective mass in tangent direction
+};
+
+// Contact constraint for advanced solver
+struct ContactConstraint {
+    uint32_t bodyA;
+    uint32_t bodyB;
+    ContactConstraintPoint points[2];
+    float normalX, normalY;    // Contact normal
+    float friction;
+    float restitution;
+    float rollingResistance;
+    int pointCount;
+    Softness softness;
+};
+
 struct NativeBody {
     uint32_t id;
     int type;
@@ -29,8 +60,10 @@ struct NativeBody {
     float restitution;
     float friction;
     float width, height, radius;
-    int isSensor; // Using int for stable FFI alignment
+    int isSensor;        // Using int for stable FFI alignment
+    int isBullet;        // Enable continuous collision detection
     int collision_count;
+    float sleepTime;     // Time body has been at rest
 };
 
 // Manifold for persistent contact tracking (Warm Starting)
@@ -58,14 +91,28 @@ struct PhysicsWorld {
     int velocityIterations;
     int positionIterations;
     
+    // Solver configuration (Box2D-inspired)
+    int enableWarmStarting;      // Enable warm starting for faster convergence
+    float contactHertz;          // Contact constraint frequency (Hz)
+    float contactDampingRatio;   // Contact damping ratio (0-1)
+    float restitutionThreshold;  // Minimum velocity for restitution
+    float maxLinearVelocity;     // Maximum linear velocity (for stability)
+    
     // Internal solver state (keep at end to avoid shifting offsets for Dart FFI)
     ContactManifold* manifolds;
     int maxManifolds;
     int activeManifolds;
+    
+    ContactConstraint* constraints;
+    int maxConstraints;
+    int activeConstraints;
 
     NativeJoint* joints;
     int maxJoints;
     int activeJoints;
+    
+    // Broadphase spatial grid
+    struct SpatialHashGrid* spatialGrid;
 };
 
 PhysicsWorld* create_physics_world(int maxBodies);

@@ -44,6 +44,21 @@ final class PhysicsWorld extends Struct {
   external int velocityIterations;
   @Int32()
   external int positionIterations;
+
+  // Solver configuration (Box2D-inspired)
+  @Int32()
+  external int enableWarmStarting;
+  @Float()
+  external double contactHertz;
+  @Float()
+  external double contactDampingRatio;
+  @Float()
+  external double restitutionThreshold;
+  @Float()
+  external double maxLinearVelocity;
+
+  // Note: Internal solver state (manifolds, constraints, joints) are pointers
+  // managed by C++ and not directly accessed from Dart
 }
 
 final class NativeBody extends Struct {
@@ -92,7 +107,11 @@ final class NativeBody extends Struct {
   @Int32()
   external int isSensor;
   @Int32()
+  external int isBullet; // Enable continuous collision detection
+  @Int32()
   external int collisionCount;
+  @Float()
+  external double sleepTime; // Time body has been at rest
 }
 
 final class ParticleEmitter extends Struct {
