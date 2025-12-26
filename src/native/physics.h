@@ -113,6 +113,11 @@ struct PhysicsWorld {
     
     // Broadphase spatial grid
     struct SpatialHashGrid* spatialGrid;
+    
+    // Box2D joints
+    struct Joint* boxJoints;
+    int maxBoxJoints;
+    int activeBoxJoints;
 };
 
 PhysicsWorld* create_physics_world(int maxBodies);
@@ -123,7 +128,6 @@ void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy);
 void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque);
 void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy);
 void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y);
-int32_t create_joint(PhysicsWorld* world, int type, uint32_t bodyA, uint32_t bodyB, float distance);
 
 }
 

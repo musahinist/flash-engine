@@ -1,5 +1,6 @@
 #include "physics.h"
 #include "broadphase.h"
+#include "joints.h"
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -58,6 +59,11 @@ PhysicsWorld* create_physics_world(int maxBodies) {
     // Default world bounds: -10000 to 10000 pixels, 200 pixel cells
     world->spatialGrid = create_spatial_grid(-10000.0f, -10000.0f, 10000.0f, 10000.0f, 200.0f);
     
+    // Initialize Box2D joints
+    world->maxBoxJoints = 100;  // Support up to 100 joints
+    world->boxJoints = new Joint[world->maxBoxJoints];
+    world->activeBoxJoints = 0;
+    
     return world;
 }
 
@@ -67,6 +73,7 @@ void destroy_physics_world(PhysicsWorld* world) {
     delete[] world->manifolds;
     delete[] world->constraints;
     destroy_spatial_grid(world->spatialGrid);
+    delete[] world->boxJoints;
     delete world;
 }
 
@@ -411,6 +418,9 @@ void step_physics(PhysicsWorld* world, float dt) {
             }
         }
     }
+    
+    // Phase 3.5: Initialize joint constraints
+    init_joint_velocity_constraints(world, dt);
 
     // Phase 4: Velocity iterations (sequential impulse solver)
     for (int iter = 0; iter < world->velocityIterations; ++iter) {
@@ -480,6 +490,9 @@ void step_physics(PhysicsWorld* world, float dt) {
                 }
             }
         }
+        
+        // Solve joint velocity constraints
+        solve_joint_velocity_constraints(world);
     }
 
     // Phase 5: Integrate positions
@@ -530,6 +543,9 @@ void step_physics(PhysicsWorld* world, float dt) {
             }
         }
     }
+    
+    // Phase 6.5: Solve joint position constraints
+    solve_joint_position_constraints(world);
 }
 
 int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation) {
