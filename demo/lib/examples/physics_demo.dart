@@ -105,7 +105,7 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
             // --- Dynamic Spawner ---
             if (_autoSpawn)
               _Spawner(
-                interval: const Duration(milliseconds: 300),
+                interval: const Duration(milliseconds: 800),
                 onTick: () {
                   setState(() {
                     _spawnBody();
