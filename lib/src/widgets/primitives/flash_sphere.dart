@@ -70,7 +70,7 @@ class _SphereNode extends FNode {
         final lightDirWorld = (bestLight.worldPosition - worldPos)..normalize();
         final invRot = worldMatrix.getRotation()..invert();
         final lightDirLocal = invRot.transform(lightDirWorld);
-        lightOffset = Offset(lightDirLocal.x * radius * 0.6, -lightDirLocal.y * radius * 0.6);
+        lightOffset = Offset(lightDirLocal.x * radius * 0.6, lightDirLocal.y * radius * 0.6);
       }
     }
 

@@ -24,12 +24,20 @@ class _InputDemoExampleState extends State<InputDemoExample> {
   bool _joystickActive = false;
 
   @override
+  void initState() {
+    super.initState();
+    FEngine.init(); // Initialize native libraries
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1a1a2e),
       appBar: AppBar(title: const Text('Input System Demo'), backgroundColor: Colors.transparent, elevation: 0),
       extendBodyBehindAppBar: true,
       body: FView(
+        autoUpdate: true,
+        enableInputCapture: true,
         child: Builder(
           builder: (context) {
             final engineWidget = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
@@ -93,8 +101,10 @@ class _InputDemoExampleState extends State<InputDemoExample> {
                 // Camera
                 FCamera(position: v.Vector3(0, 0, 500), fov: 60),
 
-                // Player
-                FSphere(position: _playerPos, radius: 30, color: Colors.cyanAccent),
+                // Light Source - at the center of the scene
+                FLight(position: v.Vector3(0, 0, 100), color: Colors.white, intensity: 1.5),
+                // Player - use clone() to ensure new reference on each build
+                FSphere(position: _playerPos.clone(), radius: 30, color: Colors.cyanAccent),
 
                 // Control hints (top)
                 Positioned(
