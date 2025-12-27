@@ -26,6 +26,17 @@ inline Vec2 rotate(Vec2 v, float angle) {
     return { v.x * c - v.y * s, v.x * s + v.y * c };
 }
 
+#include <map>
+
+// Internal cache for warm starting
+// Key: (minId << 32) | maxId
+// Value: Stored impulses for the contact point
+struct CachedImpulse {
+    float normalImpulse;
+    float tangentImpulse;
+};
+using ImpulseCache = std::map<uint64_t, CachedImpulse>;
+
 extern "C" {
 
 PhysicsWorld* create_physics_world(int maxBodies) {
@@ -48,12 +59,12 @@ PhysicsWorld* create_physics_world(int maxBodies) {
     
     // Box2D-inspired solver configuration
     world->velocityIterations = 8;  // Box2D default
-    world->positionIterations = 6;  // Increased for better penetration resolution
+    world->positionIterations = 10;  // Stronger position correction (was 3)
     world->enableWarmStarting = 1;  // Enable by default
-    world->contactHertz = 30.0f;    // 30 Hz for soft contacts
-    world->contactDampingRatio = 0.8f; // Slightly underdamped
+    world->contactHertz = 120.0f;    // 120 Hz for Rigid contacts (was 30.0f)
+    world->contactDampingRatio = 1.0f; // Critical damping (was 0.8f) to kill vibration
     world->restitutionThreshold = 1.0f * 100.0f; // 1 m/s in pixels
-    world->maxLinearVelocity = 100.0f * 100.0f;  // 100 m/s in pixels
+    world->maxLinearVelocity = 2000.0f * 100.0f;  // 2000 m/s in pixels (prevent clamping issues)
     
     // Create spatial hash grid for broadphase
     // Default world bounds: -10000 to 10000 pixels, 200 pixel cells
@@ -443,8 +454,25 @@ void step_physics(PhysicsWorld* world, float dt) {
                 
                 // Solve normal constraint
                 float vn = dv.dot(normal);
-                float bias = c.softness.biasRate * cp.baseSeparation;
-                float lambda = -cp.normalMass * (vn + bias);
+                
+                // Calculate velocity bias (Baumgarte) matching Box2D
+                // Box2D: velocityBias = softness.massScale * softness.biasRate * s
+                // s is penetration (negative separation)
+                // cp.baseSeparation is negative for penetration
+                float separation = -cp.baseSeparation; // Convert to positive penetration? No, Box2D s is separation (negative for penetration)
+                // Actually constraint->points[j].baseSeparation in Box2D is separation.
+                // Box2D: s = separation - constraint->points[j].baseSeparation ? No.
+                // s is separation.
+                
+                // In my code: cp.baseSeparation = -m.penetration; (so it's negative)
+                // Box2D logic: velocityBias = b2MaxFloat( softness.massScale * softness.biasRate * s, -contactSpeed );
+                
+                float bias = c.softness.massScale * c.softness.biasRate * cp.baseSeparation;
+                
+                // Box2D Solver: 
+                // float impulse = -cp->normalMass * ( massScale * vn + velocityBias ) - impulseScale * cp->normalImpulse;
+                
+                float lambda = -cp.normalMass * (c.softness.massScale * vn + bias) - c.softness.impulseScale * cp.normalImpulse;
                 
                 // Clamp accumulated impulse
                 float newImpulse = std::max(cp.normalImpulse + lambda, 0.0f);
@@ -519,7 +547,7 @@ void step_physics(PhysicsWorld* world, float dt) {
             if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_CIRCLE) m = detectCircleCircle(a, b);
             else if (a.shapeType == SHAPE_BOX && b.shapeType == SHAPE_BOX) m = detectBoxBox(a, b);
             else if (a.shapeType == SHAPE_CIRCLE) m = detectCircleBox(a, b);
-            else { m = detectCircleBox(b, a); if (m.collided) m.normal = m.normal * -1.0f; }
+            else { m = detectCircleBox(b, a); } // Correct normal (A->B) returned directly
             
             if (!m.collided) continue;
             

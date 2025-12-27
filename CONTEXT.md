@@ -21,12 +21,14 @@
     *   Enable it explicitly for pure physics demos (`SimpleJointsDemo`).
 
 ## Build Instructions
-1.  **macOS Desktop (Dev)**:
-    *   Command: `flutter run -d macos`
-    *   **Native Rebuild**: `clang++ -dynamiclib -std=c++17 -undefined dynamic_lookup -o lib/src/core/native/bin/libflash_core.dylib src/native/*.cpp`
-2.  **iOS Simulator (Mobile)**:
-    *   Command: `flutter run`
-    *   **Note**: Uses `libflash_core_sim.dylib`. Recompiling for simulator requires `xcrun` and arch flags (advanced).
+1.  **Native Development**:
+  - **Manual Rebuilds**: C++ changes require a cold restart and manual compilation:
+    - **macOS Desktop**: `clang++ -dynamiclib -std=c++17 -o lib/src/core/native/bin/libflash_core.dylib src/native/physics.cpp src/native/joints.cpp src/native/broadphase.cpp src/native/particles.cpp`
+    - **iOS Simulator**: `clang++ -dynamiclib -std=c++17 -arch arm64 -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -o lib/src/core/native/bin/libflash_core_sim.dylib src/native/physics.cpp src/native/joints.cpp src/native/broadphase.cpp src/native/particles.cpp`
+  - **Troubleshooting**: If you see `linker command failed with exit code 1`, it means you forgot to include a `.cpp` file (e.g., `particles.cpp`) in the build command.
+  - **Reference Implementation**: All native physics implementation MUST explicitly follow the patterns and logic found in the generated `box2d-main` or `JoltPhysics-master` folders within the project root. Do not invent custom physics solvers; adapt established logic from these sources.
+  - **Ownership**: The native C++ layer (`PhysicsWorld`, `bodies` vector) owns all memory. Dart has NO state logic, only UI representation.
+  - **FFI Boundary**: Dart only reads positions from `bodies` via `FlashNativeParticles.stepPhysics`. No logic in Dart. simulator requires `xcrun` and arch flags (advanced).
 
 ## Verification Protocol (Strict)
 1.  **Never Assume Success**: After editing code, YOU MUST verify it.

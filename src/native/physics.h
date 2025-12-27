@@ -114,10 +114,13 @@ struct PhysicsWorld {
     // Broadphase spatial grid
     struct SpatialHashGrid* spatialGrid;
     
-    // Box2D joints
+    // Native Box2D-style Joints
     struct Joint* boxJoints;
     int maxBoxJoints;
     int activeBoxJoints;
+
+    // Internal cache for warm starting (C++ std::map<uint64_t, ...>*)
+    void* warmStartCache;
 };
 
 PhysicsWorld* create_physics_world(int maxBodies);

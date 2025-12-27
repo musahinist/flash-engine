@@ -58,14 +58,22 @@ class FlashPhysicsSystem {
     return FlashNativeParticles.createPhysicsWorld!(capacity);
   }
 
-  void update(double dt) {
-    // SUB-STEPPING:
-    // 8 substeps ensures trajectory is checked frequently enough to never penetrate deep.
-    const int substeps = 8;
-    final double subDt = dt / substeps;
+  double _accumulator = 0.0;
+  static const double _fixedDt = 1.0 / 120.0; // Run physics at 120Hz fixed
 
-    for (int i = 0; i < substeps; i++) {
-      FlashNativeParticles.stepPhysics!(world, subDt);
+  void update(double dt) {
+    // Fixed Time Step Loop
+    // Accumulate time and step physics in fixed chunks.
+    // This prevents instability caused by variable frame times (dt).
+
+    // Clamp dt to avoid spiral of death
+    if (dt > 0.25) dt = 0.25;
+
+    _accumulator += dt;
+
+    while (_accumulator >= _fixedDt) {
+      FlashNativeParticles.stepPhysics!(world, _fixedDt);
+      _accumulator -= _fixedDt;
     }
   }
 
