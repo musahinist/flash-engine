@@ -1,6 +1,7 @@
 // Export core framework
 export 'framework.dart';
 export 'layout/group.dart';
+export 'scene.dart';
 
 // Export primitives
 export 'primitives/flash_circle.dart';

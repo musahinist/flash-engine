@@ -17,6 +17,20 @@ class FView extends StatefulWidget {
 
   final VoidCallback? onUpdate;
 
+  /// Called once when the engine is ready, before the first frame.
+  /// Use this for one-time scene setup like adding timers, spawners, etc.
+  ///
+  /// Example:
+  /// ```dart
+  /// FView(
+  ///   onReady: (engine) {
+  ///     engine.scene.addChild(FTimer(waitTime: 2.0, autoStart: true));
+  ///   },
+  ///   child: ...
+  /// )
+  /// ```
+  final void Function(FEngine engine)? onReady;
+
   /// If true, Flash will automatically trigger a rebuild of its child
   /// on every engine tick (60 FPS). Useful for simple declarative animations
   /// without needing an AnimationController or setState manually.
@@ -29,6 +43,7 @@ class FView extends StatefulWidget {
     this.showDebugOverlay = true,
     this.enableInputCapture = true,
     this.onUpdate,
+    this.onReady,
     this.autoUpdate = true,
   });
 
@@ -56,6 +71,9 @@ class _FViewState extends State<FView> {
       }
     };
     engine.start();
+
+    // Call onReady callback for one-time scene setup
+    widget.onReady?.call(engine);
   }
 
   int _countNodes(FNode node) {

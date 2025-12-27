@@ -18,3 +18,4 @@ export 'rendering/light.dart';
 export 'rendering/painter.dart';
 export 'graph/signal.dart';
 export 'graph/raycast_2d.dart';
+export 'graph/timer.dart';

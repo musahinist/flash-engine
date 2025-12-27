@@ -14,6 +14,21 @@ class InheritedFNode extends InheritedWidget {
   bool updateShouldNotify(InheritedFNode oldWidget) => oldWidget.node != node || oldWidget.engine != engine;
 }
 
+/// Extension for easy access to Flash engine from BuildContext.
+///
+/// Usage:
+/// ```dart
+/// final engine = context.flash; // Returns FEngine?
+/// context.flash?.scene.addChild(myNode);
+/// ```
+extension FContext on BuildContext {
+  /// Get the Flash engine from context. Returns null if outside FView.
+  FEngine? get flash => dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
+
+  /// Get the current parent node from context. Returns null if outside FView.
+  FNode? get flashNode => dependOnInheritedWidgetOfExactType<InheritedFNode>()?.node;
+}
+
 /// Base class for all declarative Flash widgets.
 abstract class FNodeWidget extends StatefulWidget {
   final v.Vector3? position;

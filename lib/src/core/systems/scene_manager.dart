@@ -10,8 +10,8 @@ enum SceneState { entering, active, exiting, inactive }
 /// Scene wrapper for managing scene lifecycle
 class FSceneWrapper {
   final String name;
-  final FScene scene;
-  final Widget Function(BuildContext context, FScene scene)? builder;
+  final FSceneRoot scene;
+  final Widget Function(BuildContext context, FSceneRoot scene)? builder;
 
   SceneState state = SceneState.inactive;
   double transitionProgress = 0;
@@ -25,8 +25,8 @@ class FSceneWrapper {
   /// Called every frame while active
   void Function(double dt)? onUpdate;
 
-  FSceneWrapper({required this.name, FScene? scene, this.builder, this.onEnter, this.onExit, this.onUpdate})
-    : scene = scene ?? FScene(name: name);
+  FSceneWrapper({required this.name, FSceneRoot? scene, this.builder, this.onEnter, this.onExit, this.onUpdate})
+    : scene = scene ?? FSceneRoot(name: name);
 }
 
 /// Scene manager for handling multiple scenes and transitions

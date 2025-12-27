@@ -20,6 +20,7 @@ import 'examples/joints_demo.dart';
 import 'examples/simple_joints_demo.dart';
 import 'examples/master_tech_demo.dart';
 import 'examples/raycast_demo.dart';
+import 'examples/timer_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -173,6 +174,12 @@ class ExampleMenu extends StatelessWidget {
         description: 'Ray-based detection.',
         icon: Icons.flash_on_rounded,
         builder: (_) => const RayCastDemo(),
+      ),
+      _ExampleData(
+        title: 'Timer Demo',
+        description: 'Godot-style timers.',
+        icon: Icons.timer_rounded,
+        builder: (_) => const TimerDemo(),
       ),
     ];
 

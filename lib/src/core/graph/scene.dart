@@ -1,5 +1,6 @@
 import 'node.dart';
 
-class FScene extends FNode {
-  FScene({super.name = 'Scene'});
+/// Root scene node - container for all top-level nodes.
+class FSceneRoot extends FNode {
+  FSceneRoot({super.name = 'SceneRoot'});
 }
