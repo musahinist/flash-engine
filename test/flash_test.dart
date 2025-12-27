@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flash/flash.dart';
 
 void main() {
-  test('FlashNode hierarchy test', () {
+  test('FNode hierarchy test', () {
     final root = FNode(name: 'root');
     final child = FNode(name: 'child');
     root.addChild(child);
