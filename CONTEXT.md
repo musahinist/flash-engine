@@ -73,6 +73,17 @@
     *   **Padding**: Account for `AppBar` height (~56px) and Status Bar when calculating "Top" edge boundaries.
 3.  **Positioning Rule**:
     *   **Don't Guess**: Use `FCamera.getWorldBounds()` (if available) or assume a Safe Zone (e.g., +/- 150px) rather than hardcoding large values like `y: -500` which might be off-screen.
+4.  **Viewport-Relative Positioning (CRITICAL)**:
+    *   **NEVER HARDCODE POSITIONS**: Do not use hardcoded pixel values like `position: Vector3(400, 300, 0)`. Different devices have different screen sizes.
+    *   **Use engine.viewportSize**: Access `context.flash!.viewportSize` to get current viewport dimensions.
+    *   **Calculate Relative Values**:
+        ```dart
+        final viewport = context.flash!.viewportSize;
+        final x = (rnd.nextDouble() - 0.5) * viewport.x * 0.6; // 60% of width
+        final y = (rnd.nextDouble() - 0.5) * viewport.y * 0.5; // 50% of height
+        ```
+    *   **World Space Calculation**: For 3D perspective (FOV 60°, Camera at z=500), visible width ≈ `viewport.y * 0.8` at z=0. Use this for spawn calculations.
+    *   **Safe Margins**: Keep spawned objects within 80% of viewport dimensions to account for perspective distortion.
 
 
 ### Native Development Rules

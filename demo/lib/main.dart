@@ -53,7 +53,7 @@ class ExampleMenu extends StatelessWidget {
         title: 'Basic Scene',
         description: '3D shapes & Z-sorting.',
         icon: Icons.grid_view_rounded,
-        builder: (_) => const BasicSceneExample(),
+        builder: (_) => BasicSceneExample(),
       ),
       _ExampleData(
         title: 'Solar System',
