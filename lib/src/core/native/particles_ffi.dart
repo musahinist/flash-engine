@@ -56,6 +56,8 @@ final class NativeNode extends Struct {
   external int visible;
   @Int32()
   external int dirty;
+  @Uint32()
+  external int worldVersion;
 }
 
 final class NativeScene extends Struct {
@@ -64,6 +66,8 @@ final class NativeScene extends Struct {
   external int maxNodes;
   @Int32()
   external int activeCount;
+  @Uint32()
+  external int totalUpdates;
 }
 
 final class PhysicsWorld extends Struct {
@@ -175,6 +179,8 @@ final class ParticleEmitter extends Struct {
   external double gravityY;
   @Float()
   external double gravityZ;
+  @Int32()
+  external int shapeType;
 }
 
 // RayCast Struct (Must match C++ physics.h)

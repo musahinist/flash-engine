@@ -22,12 +22,14 @@ struct NativeNode {
     int32_t parentId; // -1 for root
     int32_t visible;
     int32_t dirty;
+    uint32_t worldVersion; // Track if worldMatrix is up-to-date
 };
 
 struct NativeScene {
     NativeNode* nodes;
     int maxNodes;
     int activeCount;
+    uint32_t totalUpdates; // Increment every time update_scene_transforms is called
 };
 
 NativeScene* create_native_scene(int maxNodes);

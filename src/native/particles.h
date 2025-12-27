@@ -20,6 +20,7 @@ struct ParticleEmitter {
     int activeCount;
     
     float gravityX, gravityY, gravityZ;
+    int shapeType; // 0 = Quad, 1 = Hexagon, 2 = Octagon
 };
 
 // Functions exported to Dart via FFI

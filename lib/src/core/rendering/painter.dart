@@ -60,9 +60,10 @@ class FPainter extends CustomPainter {
     }
   }
 
-  // Native buffers for 500k particles to save memory (Quads)
-  static final Pointer<Float> _verticesPtr = calloc<Float>(500000 * 6 * 2);
-  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(500000 * 6);
+  // Native buffers for particles. Max supported count is 1 million.
+  // Max vertices per particle is 30 (for 12-sided "round" shape).
+  static final Pointer<Float> _verticesPtr = calloc<Float>(1000000 * 30 * 2);
+  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(1000000 * 30);
   static final Pointer<Float> _matrixPtr = calloc<Float>(16);
 
   void _renderParticles(Canvas canvas, Matrix4 cameraMatrix, FParticleEmitter emitter) {
@@ -80,13 +81,27 @@ class FPainter extends CustomPainter {
     final fillFunc = FlashNativeParticles.fillVertexBuffer;
     if (fillFunc == null) return;
 
-    final renderedCount = fillFunc(emitter.nativeEmitterPointer, _matrixPtr, _verticesPtr, _colorsPtr, 500000);
+    final renderedCount = fillFunc(emitter.nativeEmitterPointer, _matrixPtr, _verticesPtr, _colorsPtr, 1000000);
 
     if (renderedCount > 0) {
+      // Get vertex multiplier based on shape
+      int vCount = 6;
+      final shape = emitter.shapeType;
+      if (shape == 1)
+        vCount = 12; // Hexagon
+      else if (shape == 2)
+        vCount = 18; // Octagon
+      else if (shape == 3)
+        vCount = 30; // 12-sided (Round)
+      else if (shape == 4)
+        vCount = 3; // Triangle (1M+ Ultra Performance)
+
+      final totalVertices = renderedCount * vCount;
+
       final vertices = ui.Vertices.raw(
         ui.VertexMode.triangles,
-        _verticesPtr.asTypedList(renderedCount * 6 * 2),
-        colors: _colorsPtr.cast<Int32>().asTypedList(renderedCount * 6),
+        _verticesPtr.asTypedList(totalVertices * 2),
+        colors: _colorsPtr.cast<Int32>().asTypedList(totalVertices),
       );
 
       canvas.drawVertices(vertices, BlendMode.srcOver, Paint());

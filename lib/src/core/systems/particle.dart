@@ -76,6 +76,9 @@ class ParticleEmitterConfig {
   final double rotationSpeedMin;
   final double rotationSpeedMax;
 
+  /// Particle shape (0=Quad, 1=Hexagon, 2=Octagon, 3=Round(12))
+  final int shapeType;
+
   ParticleEmitterConfig({
     this.emissionRate = 50,
     this.lifetimeMin = 0.5,
@@ -92,6 +95,7 @@ class ParticleEmitterConfig {
     this.maxParticles = 500,
     this.rotationSpeedMin = 0,
     this.rotationSpeedMax = 0,
+    this.shapeType = 0,
   }) : velocityMin = velocityMin ?? Vector3(0, 50, 0),
        velocityMax = velocityMax ?? Vector3(0, 100, 0),
        gravity = gravity ?? Vector3(0, -100, 0);
@@ -109,6 +113,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFFFFDD00),
     endColor: const Color(0x00FF4400),
     spreadAngle: 0.3,
+    shapeType: 1, // Hexagon
   );
 
   /// Smoke preset
@@ -124,6 +129,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xAA666666),
     endColor: const Color(0x00333333),
     spreadAngle: 0.4,
+    shapeType: 3, // Round (12 sides) for soft look
   );
 
   /// Sparkle preset
@@ -141,6 +147,7 @@ class ParticleEmitterConfig {
     spreadAngle: 3.14,
     rotationSpeedMin: -5,
     rotationSpeedMax: 5,
+    shapeType: 4, // Triangle for tiny performance bits
   );
 
   /// Explosion preset (burst, no loop)
@@ -158,6 +165,7 @@ class ParticleEmitterConfig {
     spreadAngle: 3.14,
     loop: false,
     maxParticles: 200,
+    shapeType: 1, // Hexagon
   );
 
   /// Snow preset
@@ -175,6 +183,7 @@ class ParticleEmitterConfig {
     spreadAngle: 0.2,
     rotationSpeedMin: -2,
     rotationSpeedMax: 2,
+    shapeType: 2, // Octagon for icy crystals
   );
 
   /// Rain preset
@@ -190,6 +199,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xAA88CCFF),
     endColor: const Color(0x0088CCFF),
     spreadAngle: 0.05,
+    shapeType: 4, // Triangle (streaks)
   );
 
   /// Confetti preset (colorful celebration)
@@ -207,6 +217,7 @@ class ParticleEmitterConfig {
     spreadAngle: 0.8,
     rotationSpeedMin: -8,
     rotationSpeedMax: 8,
+    shapeType: 0, // Quad is perfect for paper scraps
   );
 
   /// Magic/fairy dust preset
@@ -224,6 +235,7 @@ class ParticleEmitterConfig {
     spreadAngle: 1.0,
     rotationSpeedMin: -3,
     rotationSpeedMax: 3,
+    shapeType: 2, // Octagon
   );
 
   /// Bubbles preset
@@ -239,6 +251,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0x88AADDFF),
     endColor: const Color(0x00FFFFFF),
     spreadAngle: 0.3,
+    shapeType: 3, // Round (12 sides) mandatory for bubbles
   );
 
   /// Dust/debris preset
@@ -256,6 +269,7 @@ class ParticleEmitterConfig {
     spreadAngle: 1.5,
     rotationSpeedMin: -2,
     rotationSpeedMax: 2,
+    shapeType: 4, // Triangle
   );
 
   /// Fireflies preset (glowing dots)
@@ -271,6 +285,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFFAAFF44),
     endColor: const Color(0x0044FF44),
     spreadAngle: 2.0,
+    shapeType: 1, // Hexagon
   );
 
   /// Meteor/comet trail preset
@@ -286,6 +301,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFFFFCC00),
     endColor: const Color(0x00FF4400),
     spreadAngle: 0.2,
+    shapeType: 4, // Triangle
   );
 
   /// Healing/buff effect preset
@@ -301,6 +317,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFF44FF88),
     endColor: const Color(0x0088FF44),
     spreadAngle: 0.5,
+    shapeType: 2, // Octagon
   );
 
   /// Electric/lightning sparks preset
@@ -316,6 +333,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFF88DDFF),
     endColor: const Color(0x00FFFFFF),
     spreadAngle: 3.14,
+    shapeType: 4, // Triangle
   );
 
   /// Blood/damage effect preset
@@ -331,6 +349,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFFCC0000),
     endColor: const Color(0x00880000),
     spreadAngle: 0.8,
+    shapeType: 1, // Hexagon
   );
 
   /// Lava bubbling effect preset
@@ -346,6 +365,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xFFFF4400), // Bright orange
     endColor: const Color(0x00CC2200), // Dark red fade
     spreadAngle: 0.4,
+    shapeType: 2, // Octagon
   );
 
   /// Poison/toxic effect preset
@@ -361,6 +381,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0xAA44FF00), // Toxic green
     endColor: const Color(0x00228800),
     spreadAngle: 0.6,
+    shapeType: 2, // Octagon
   );
 
   /// Steam/vapor effect preset
@@ -376,6 +397,7 @@ class ParticleEmitterConfig {
     startColor: const Color(0x66FFFFFF),
     endColor: const Color(0x00DDDDDD),
     spreadAngle: 0.5,
+    shapeType: 3, // Round for gas clouds
   );
 }
 
@@ -402,9 +424,13 @@ class FParticleEmitter extends FNode {
     _nativeEmitter.ref.particles = calloc<NativeParticle>(maxParticles);
     _nativeEmitter.ref.maxParticles = maxParticles;
     _nativeEmitter.ref.activeCount = 0;
+    _nativeEmitter.ref.shapeType = this.config.shapeType;
 
     _updateNativeGravity();
   }
+
+  int get shapeType => _nativeEmitter.ref.shapeType;
+  set shapeType(int value) => _nativeEmitter.ref.shapeType = value;
 
   void _updateNativeGravity() {
     _nativeEmitter.ref.gravityX = config.gravity.x;

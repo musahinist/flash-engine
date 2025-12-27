@@ -57,6 +57,7 @@ NativeScene* create_native_scene(int maxNodes) {
     scene->maxNodes = maxNodes;
     scene->nodes = new NativeNode[maxNodes];
     scene->activeCount = 0;
+    scene->totalUpdates = 0;
     return scene;
 }
 
@@ -77,6 +78,7 @@ int32_t create_native_node(NativeScene* scene, int32_t parentId) {
     node.scaleX = node.scaleY = node.scaleZ = 1.0f;
     node.visible = 1;
     node.dirty = 1;
+    node.worldVersion = 0;
     mat4_identity(node.localMatrix.m);
     mat4_identity(node.worldMatrix.m);
     
@@ -84,12 +86,12 @@ int32_t create_native_node(NativeScene* scene, int32_t parentId) {
 }
 
 void update_scene_transforms(NativeScene* scene) {
-    // Linear pass works if parentId < currentId
-    // We assume Dart-side keeps this order or we'd need a multi-pass/recursive approach.
+    scene->totalUpdates++;
+    
     for (int i = 0; i < scene->activeCount; ++i) {
         NativeNode& node = scene->nodes[i];
         
-        // Rebuild local matrix if dirty
+        bool localChanged = false;
         if (node.dirty) {
             mat4_from_prs(node.localMatrix.m, 
                 node.posX, node.posY, node.posZ,
@@ -97,13 +99,27 @@ void update_scene_transforms(NativeScene* scene) {
                 node.scaleX, node.scaleY, node.scaleZ
             );
             node.dirty = 0;
+            localChanged = true;
         }
         
-        if (node.parentId == -1) {
-            memcpy(node.worldMatrix.m, node.localMatrix.m, 16 * sizeof(float));
-        } else {
+        bool parentChanged = false;
+        uint32_t parentWorldVersion = 0;
+        if (node.parentId != -1) {
             NativeNode& parent = scene->nodes[node.parentId];
-            mat4_mul(node.worldMatrix.m, parent.worldMatrix.m, node.localMatrix.m);
+            parentWorldVersion = parent.worldVersion;
+            if (node.worldVersion < parentWorldVersion) {
+                parentChanged = true;
+            }
+        }
+
+        if (localChanged || parentChanged || node.worldVersion == 0) {
+            if (node.parentId == -1) {
+                memcpy(node.worldMatrix.m, node.localMatrix.m, 16 * sizeof(float));
+            } else {
+                NativeNode& parent = scene->nodes[node.parentId];
+                mat4_mul(node.worldMatrix.m, parent.worldMatrix.m, node.localMatrix.m);
+            }
+            node.worldVersion = scene->totalUpdates;
         }
     }
 }

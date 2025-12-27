@@ -65,8 +65,17 @@ void fill_chunk_pass1(ParticleEmitter* emitter, float* m, ThreadWork& work) {
 }
 
 void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, const ThreadWork& work, int globalOffset) {
-    int vPtr = globalOffset * 6 * 2; // 6 vertices per particle
-    int cPtr = globalOffset * 6;     // 6 colors per particle
+    int sides = 4;
+    if (emitter->shapeType == 1) sides = 6;
+    else if (emitter->shapeType == 2) sides = 8;
+    else if (emitter->shapeType == 3) sides = 12;
+    else if (emitter->shapeType == 4) sides = 3;
+
+    int triCount = sides - 2;
+    int vCount = triCount * 3;
+
+    int vPtr = globalOffset * vCount * 2;
+    int cPtr = globalOffset * vCount;
 
     for (int idx : work.visibleIndices) {
         NativeParticle& p = emitter->particles[idx];
@@ -82,20 +91,22 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
         uint32_t alpha = (uint32_t)(p.life * 255.0f);
         uint32_t col = (p.color & 0x00FFFFFF) | (alpha << 24);
 
-        // Quad Geometry (2 triangles: 0-1-2 and 0-2-3)
-        float qx[] = {-1.0f, 1.0f, 1.0f, -1.0f};
-        float qy[] = {-1.0f, -1.0f, 1.0f, 1.0f};
+        // Generate N-sided polygon vertices
+        float px[12], py[12];
+        for (int i = 0; i < sides; ++i) {
+            float angle = i * (2.0f * M_PI / sides);
+            px[i] = screenX + cosf(angle) * halfSize;
+            py[i] = screenY + sinf(angle) * halfSize;
+        }
 
-        // Vertices (6 vertices to form a quad via 2 triangles)
-        vertices[vPtr++] = screenX + qx[0] * halfSize; vertices[vPtr++] = screenY + qy[0] * halfSize;
-        vertices[vPtr++] = screenX + qx[1] * halfSize; vertices[vPtr++] = screenY + qy[1] * halfSize;
-        vertices[vPtr++] = screenX + qx[2] * halfSize; vertices[vPtr++] = screenY + qy[2] * halfSize;
-        
-        vertices[vPtr++] = screenX + qx[0] * halfSize; vertices[vPtr++] = screenY + qy[0] * halfSize;
-        vertices[vPtr++] = screenX + qx[2] * halfSize; vertices[vPtr++] = screenY + qy[2] * halfSize;
-        vertices[vPtr++] = screenX + qx[3] * halfSize; vertices[vPtr++] = screenY + qy[3] * halfSize;
+        // Fan-out triangles (0-i-(i+1))
+        for (int i = 1; i < sides - 1; ++i) {
+            vertices[vPtr++] = px[0]; vertices[vPtr++] = py[0];
+            vertices[vPtr++] = px[i]; vertices[vPtr++] = py[i];
+            vertices[vPtr++] = px[i+1]; vertices[vPtr++] = py[i+1];
+        }
 
-        for (int i = 0; i < 6; ++i) colors[cPtr++] = col;
+        for (int i = 0; i < vCount; ++i) colors[cPtr++] = col;
     }
 }
 
@@ -103,9 +114,23 @@ int fill_vertex_buffer(ParticleEmitter* emitter, float* m, float* vertices, uint
     if (!emitter || !emitter->particles || emitter->activeCount == 0) return 0;
 
     int totalToProcess = std::min(emitter->activeCount, maxRenderCount);
-    unsigned int numThreads = std::min((unsigned int)8, std::thread::hardware_concurrency());
+    
+    // Performance optimization: Avoid thread-spawning overhead for small-medium counts.
+    // std::thread is expensive to create every frame. 
+    // Single-threaded is often faster for up to 100k particles on modern CPUs.
+    if (totalToProcess < 100000) {
+        ThreadWork work;
+        work.startIdx = 0;
+        work.endIdx = totalToProcess;
+        fill_chunk_pass1(emitter, m, work);
+        if (work.visibleCount > 0) {
+            fill_chunk_pass2(emitter, m, vertices, colors, work, 0);
+        }
+        return work.visibleCount;
+    }
+
+    unsigned int numThreads = std::min((unsigned int)4, std::thread::hardware_concurrency());
     if (numThreads < 1) numThreads = 1;
-    if (totalToProcess < 1000) numThreads = 1;
 
     std::vector<ThreadWork> works(numThreads);
     std::vector<std::thread> threads;

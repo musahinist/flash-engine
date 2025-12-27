@@ -21,6 +21,8 @@ class FNode {
   int _nativeNodeId = -1;
   int get nativeNodeId => _nativeNodeId;
   Pointer<NativeNode>? _nativeNodePtr;
+  int _lastFetchedVersion = -1;
+  bool _localSyncNeeded = true;
 
   // -- Lifecycle --
   FSceneTree? _tree;
@@ -175,6 +177,7 @@ class FNode {
   void setWorldDirty() {
     if (_worldDirty) return;
     _worldDirty = true;
+    _localSyncNeeded = true;
     _cachedWorldPosition = null;
     _nativeNodePtr?.ref.dirty = 1;
     for (final child in children) {
@@ -287,9 +290,30 @@ class FNode {
 
   Matrix4 get worldMatrix {
     if (_nativeNodePtr != null) {
-      final nm = _nativeNodePtr!.ref.worldMatrix;
-      _cachedWorldMatrix.storage.setAll(0, nm.toList());
-      _worldDirty = false; // Reset to allow future setWorldDirty() calls to sync to native
+      final nativeScene = _tree!.engine.nativeScene.ref;
+      if (_lastFetchedVersion != nativeScene.totalUpdates) {
+        final nm = _nativeNodePtr!.ref.worldMatrix;
+        _cachedWorldMatrix.setValues(
+          nm.m0,
+          nm.m1,
+          nm.m2,
+          nm.m3,
+          nm.m4,
+          nm.m5,
+          nm.m6,
+          nm.m7,
+          nm.m8,
+          nm.m9,
+          nm.m10,
+          nm.m11,
+          nm.m12,
+          nm.m13,
+          nm.m14,
+          nm.m15,
+        );
+        _lastFetchedVersion = nativeScene.totalUpdates;
+        _worldDirty = false;
+      }
       return _cachedWorldMatrix;
     }
 
@@ -305,17 +329,22 @@ class FNode {
   }
 
   void _syncToNative() {
-    if (_nativeNodePtr == null) return;
+    if (_nativeNodePtr == null || !_localSyncNeeded) return;
     final n = _nativeNodePtr!.ref;
-    n.posX = transform.position.x;
-    n.posY = transform.position.y;
-    n.posZ = transform.position.z;
-    n.rotX = transform.rotation.x;
-    n.rotY = transform.rotation.y;
-    n.rotZ = transform.rotation.z;
-    n.scaleX = transform.scale.x;
-    n.scaleY = transform.scale.y;
-    n.scaleZ = transform.scale.z;
+    final pos = transform.position;
+    final rot = transform.rotation;
+    final scale = transform.scale;
+
+    n.posX = pos.x;
+    n.posY = pos.y;
+    n.posZ = pos.z;
+    n.rotX = rot.x;
+    n.rotY = rot.y;
+    n.rotZ = rot.z;
+    n.scaleX = scale.x;
+    n.scaleY = scale.y;
+    n.scaleZ = scale.z;
     n.visible = visible ? 1 : 0;
+    _localSyncNeeded = false;
   }
 }
