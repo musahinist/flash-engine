@@ -139,15 +139,35 @@ class FProjector extends StatelessWidget {
     return ListenableBuilder(
       listenable: engine,
       builder: (context, _) {
-        final screenPos = engine.project(node.worldPosition);
+        final worldPos = node.worldPosition;
+        final screenPos = engine.project(worldPos);
         if (screenPos == null) return const SizedBox.shrink();
+
+        // Calculate relative offset if nested inside another FProjector's coordinate system
+        // However, since we are moving to Transform.translate, we need to be careful.
+        // If we want absolute screen position regardless of parent widgets,
+        // we should ideally use a Stack at the root.
+        //
+        // Fix: Use Transform instead of Positioned to avoid ParentDataWidget errors.
+        // To make it work in nested scenarios, we check if we have a parent node
+        // and subtract its projected position to get a relative screen-space offset.
+
+        v.Vector2 offset = screenPos;
+
+        // Try to find a parent node that might be projecting us
+        final parentHost = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
+        if (parentHost != null && parentHost.node != node) {
+          final parentScreenPos = engine.project(parentHost.node.worldPosition);
+          if (parentScreenPos != null) {
+            offset = screenPos - parentScreenPos;
+          }
+        }
 
         // Calculate rotation in degrees for Flutter's Transform
         final rotationZ = node.transform.rotation.z;
 
-        return Positioned(
-          left: screenPos.x,
-          top: screenPos.y,
+        return Transform.translate(
+          offset: Offset(offset.x, offset.y),
           child: FractionalTranslation(
             translation: const Offset(-0.5, -0.5), // Center the child on the point
             child: Transform.rotate(angle: rotationZ, child: child),
