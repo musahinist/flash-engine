@@ -14,8 +14,6 @@ class FCameraNode extends FNode {
     transform.position.setValues(0, 0, 1000);
   }
 
-  Matrix2? _projectionMatrix; // Not used here, using local caching if needed but standard is getProjectionMatrix
-
   Matrix4 getProjectionMatrix(double width, double height) {
     if (width <= 0 || height <= 0) return Matrix4.identity();
     final aspect = width / height;

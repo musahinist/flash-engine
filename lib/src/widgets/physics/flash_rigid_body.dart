@@ -163,6 +163,14 @@ class _FRigidBodyState extends FNodeWidgetState<FRigidBody, FPhysicsBody> {
       widget.onCreated!(body);
     }
 
+    // Connect signals to widget callbacks
+    if (widget.onUpdate != null) {
+      body.physicsProcess.connect((b) => widget.onUpdate?.call(b));
+    }
+    if (widget.onCollision != null) {
+      body.collision.connect((b) => widget.onCollision?.call(b));
+    }
+
     return body;
   }
 

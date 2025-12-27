@@ -115,10 +115,46 @@ abstract class FNodeWidgetState<T extends FNodeWidget, N extends FNode> extends 
     if (widget.child != null) {
       final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
       if (engine != null) {
-        return InheritedFNode(node: node, engine: engine, child: widget.child!);
+        return InheritedFNode(
+          node: node,
+          engine: engine,
+          child: FProjector(node: node, engine: engine, child: widget.child!),
+        );
       }
     }
     return widget.child ?? const SizedBox.shrink();
+  }
+}
+
+/// A widget that positions its child to follow a Flash node in screen space.
+class FProjector extends StatelessWidget {
+  final FNode node;
+  final FEngine engine;
+  final Widget child;
+
+  const FProjector({super.key, required this.node, required this.engine, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: engine,
+      builder: (context, _) {
+        final screenPos = engine.project(node.worldPosition);
+        if (screenPos == null) return const SizedBox.shrink();
+
+        // Calculate rotation in degrees for Flutter's Transform
+        final rotationZ = node.transform.rotation.z;
+
+        return Positioned(
+          left: screenPos.x,
+          top: screenPos.y,
+          child: FractionalTranslation(
+            translation: const Offset(-0.5, -0.5), // Center the child on the point
+            child: Transform.rotate(angle: rotationZ, child: child),
+          ),
+        );
+      },
+    );
   }
 }
 

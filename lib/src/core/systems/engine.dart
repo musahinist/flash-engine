@@ -161,6 +161,30 @@ class FEngine extends ChangeNotifier {
     _collectNodes(scene, vpMatrix);
   }
 
+  /// Projects a world position to screen space pixels.
+  v.Vector2? project(v.Vector3 worldPos) {
+    if (activeCamera == null || viewportSize.x <= 0 || viewportSize.y <= 0) return null;
+
+    final proj = activeCamera!.getProjectionMatrix(viewportSize.x, viewportSize.y);
+    final view = activeCamera!.getViewMatrix();
+    final vp = proj * view;
+
+    final point = v.Vector4(worldPos.x, worldPos.y, worldPos.z, 1.0);
+    final res = vp * point;
+
+    if (res.w == 0) return null;
+
+    // NDC [-1, 1]
+    final ndcX = res.x / res.w;
+    final ndcY = res.y / res.w;
+
+    // Map to Viewport Pixels [0, size]
+    final screenX = (ndcX + 1.0) * viewportSize.x / 2.0;
+    final screenY = (1.0 - ndcY) * viewportSize.y / 2.0;
+
+    return v.Vector2(screenX, screenY);
+  }
+
   void _collectNodes(FNode node, v.Matrix4? vpMatrix) {
     if (node != scene) {
       if (!node.visible) return;

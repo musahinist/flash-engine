@@ -63,8 +63,8 @@ class FJointNode extends FNode {
     if (a == null || b == null) return;
 
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
-      ..strokeWidth = 2.0
+      ..color = Colors.cyanAccent.withOpacity(0.6)
+      ..strokeWidth = 4.0
       ..style = PaintingStyle.stroke;
 
     // Convert world positions to local positions relative to this node

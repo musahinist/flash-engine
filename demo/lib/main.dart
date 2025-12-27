@@ -17,10 +17,10 @@ import 'examples/collision_layers_demo.dart';
 import 'examples/three_d_audio_demo.dart';
 import 'examples/native_particle_demo.dart';
 import 'examples/joints_demo.dart';
-import 'examples/simple_joints_demo.dart';
 import 'examples/master_tech_demo.dart';
 import 'examples/raycast_demo.dart';
 import 'examples/timer_demo.dart';
+import 'examples/pendulum_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -74,16 +74,16 @@ class ExampleMenu extends StatelessWidget {
         builder: (_) => const PhysicsDemoExample(),
       ),
       _ExampleData(
-        title: 'Box2D Joints',
-        description: 'Distance, Revolute, Prismatic, Weld.',
-        icon: Icons.link_rounded,
+        title: 'Kinetic Sculpture',
+        description: 'Neon mechanical masterpiece.',
+        icon: Icons.hub_rounded,
         builder: (_) => const JointsDemoExample(),
       ),
       _ExampleData(
-        title: 'Simple Joints',
-        description: 'Working rope & pendulum demo.',
-        icon: Icons.settings_ethernet_rounded,
-        builder: (_) => const SimpleJointsDemo(),
+        title: 'Neon Cradle',
+        description: "Newton's Cradle physics.",
+        icon: Icons.unfold_more_double_rounded,
+        builder: (_) => const PendulumDemoExample(),
       ),
       _ExampleData(
         title: '2.5D Diorama',

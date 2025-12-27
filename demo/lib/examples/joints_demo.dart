@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
+import 'dart:math' as math;
 
 class JointsDemoExample extends StatefulWidget {
   const JointsDemoExample({super.key});
@@ -9,544 +10,390 @@ class JointsDemoExample extends StatefulWidget {
   State<JointsDemoExample> createState() => _JointsDemoExampleState();
 }
 
+class _Spark {
+  final int id;
+  final v.Vector3 position;
+  _Spark(this.id, this.position);
+}
+
 class _JointsDemoExampleState extends State<JointsDemoExample> {
-  int selectedDemo = 0;
-  final List<String> demoNames = [
-    'Rope Bridge (Distance)',
-    'Pendulum (Revolute)',
-    'Piston (Prismatic)',
-    'Ragdoll (Weld)',
-    'All Joints',
-  ];
+  final List<_Spark> _sparks = [];
+  int _nextSparkId = 0;
+  static const double _cameraSize = 600.0; // Half-height
+
+  void _spawnSpark(v.Vector3 pos) {
+    setState(() {
+      _sparks.add(_Spark(_nextSparkId++, pos));
+      if (_sparks.length > 20) _sparks.removeAt(0);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Box2D Joints Demo'),
-        backgroundColor: Colors.black87,
-        actions: [
-          DropdownButton<int>(
-            value: selectedDemo,
-            dropdownColor: Colors.black87,
-            style: const TextStyle(color: Colors.white),
-            items: List.generate(demoNames.length, (i) => DropdownMenuItem(value: i, child: Text(demoNames[i]))),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() => selectedDemo = value);
-              }
-            },
+      backgroundColor: const Color(0xFF050505),
+      body: FScene(
+        showDebugOverlay: false,
+        onInit: (engine, viewport) {
+          // One-time setup if needed
+        },
+        scene: [
+          // Cyberpunk Background Elements
+          const _NeonGrid(),
+
+          // Orthographic Camera using our unified scale
+          FCamera(position: v.Vector3(0, 0, 1000), isOrthographic: true, orthographicSize: _cameraSize),
+
+          // --- THE NEON KINETIC SCULPTURE ---
+
+          // 1. THE CORE HUB (Motorized) - Centered at (0, 0)
+          FStaticBody(
+            name: 'CorePivot',
+            position: v.Vector3(0, 0, 0),
+            width: 40,
+            height: 40,
+            child: const _GlowNode(color: Colors.cyan, radius: 20),
           ),
-          const SizedBox(width: 16),
+
+          FRigidBody.square(
+            name: 'CentralGear',
+            position: v.Vector3(0, 0, 0),
+            size: 100,
+            child: const _NeonGear(color: Colors.cyanAccent),
+          ),
+
+          FRevoluteJoint(
+            nodeA: 'CorePivot',
+            nodeB: 'CentralGear',
+            anchor: v.Vector2(0, 0),
+            enableMotor: true,
+            motorSpeed: 1.1,
+            maxMotorTorque: 10000.0,
+          ),
+
+          // 2. THE MECHANICAL ARMS (Four Directions)
+          ..._buildMechanicalArms(),
+
+          // 3. THE RECOVERY WEB (Bottom reactive part)
+          ..._buildNeonWeb(),
+
+          // 4. INTERACTIVE SPARKLES
+          for (final spark in _sparks)
+            FRigidBody.circle(
+              key: ValueKey('spark_${spark.id}'),
+              name: 'Spark',
+              position: spark.position,
+              radius: 5,
+              restitution: 0.8,
+              child: const _GlowNode(color: Colors.yellowAccent, radius: 5),
+            ),
+        ],
+        overlay: [
+          _buildSciFiHUD(),
+          Positioned.fill(
+            child: GestureDetector(
+              onTapDown: (details) {
+                // Convert screen touch to world space (simple 1:1 for ortho @ 500 size)
+                final box = context.findRenderObject() as RenderBox;
+                final local = box.globalToLocal(details.globalPosition);
+                // Unified conversion formula for orthographic projection:
+                // scale = (2 * halfHeight) / viewportHeight
+                final scale = (2 * _cameraSize) / box.size.height;
+                final worldX = (local.dx - box.size.width / 2) * scale;
+                final worldY = -(local.dy - box.size.height / 2) * scale;
+                _spawnSpark(v.Vector3(worldX, worldY, 0));
+              },
+            ),
+          ),
         ],
       ),
-      body: FView(
-        child: Stack(
+    );
+  }
+
+  List<Widget> _buildMechanicalArms() {
+    List<Widget> arms = [];
+    final angles = [0, math.pi / 2, math.pi, 3 * math.pi / 2];
+    final colors = [Colors.purpleAccent, Colors.limeAccent, Colors.orangeAccent, Colors.blueAccent];
+
+    for (int i = 0; i < 4; i++) {
+      final angle = angles[i];
+      final color = colors[i];
+      final dir = v.Vector2(math.cos(angle), math.sin(angle));
+      final endPos = v.Vector3(dir.x * 150, dir.y * 150, 0);
+
+      arms.add(
+        FRigidBody.square(
+          name: 'Arm_$i',
+          position: endPos,
+          size: 40,
+          child: _NeonGear(color: color, size: 40),
+        ),
+      );
+
+      arms.add(
+        FDistanceJoint(
+          nodeA: 'CentralGear',
+          nodeB: 'Arm_$i',
+          anchorA: v.Vector2(dir.x * 50, dir.y * 50),
+          length: 150,
+          frequency: 0, // Perfectly Rigid
+          dampingRatio: 1.0,
+        ),
+      );
+
+      // Sarkaç (Pendulum) at the end of each arm
+      final bobPos = v.Vector3(endPos.x, endPos.y - 120, 0);
+      arms.add(
+        FRigidBody.circle(
+          name: 'Bob_$i',
+          position: bobPos,
+          radius: 18,
+          child: _GlowNode(color: color, radius: 18),
+        ),
+      );
+
+      arms.add(FDistanceJoint(nodeA: 'Arm_$i', nodeB: 'Bob_$i', length: 120, frequency: 0, dampingRatio: 1.0));
+    }
+    return arms;
+  }
+
+  List<Widget> _buildNeonWeb() {
+    return [
+      FStaticBody(
+        name: 'WebAnchorLeft',
+        position: v.Vector3(-220, -400, 0),
+        width: 20,
+        height: 20,
+        child: const _GlowNode(color: Colors.white24, radius: 10),
+      ),
+      FStaticBody(
+        name: 'WebAnchorRight',
+        position: v.Vector3(220, -400, 0),
+        width: 20,
+        height: 20,
+        child: const _GlowNode(color: Colors.white24, radius: 10),
+      ),
+      for (int i = 0; i < 6; i++)
+        FRigidBody.circle(
+          name: 'WebNode_$i',
+          position: v.Vector3(-150.0 + (i * 60), -450, 0),
+          radius: 8,
+          child: const _GlowNode(color: Colors.cyanAccent, radius: 8),
+        ),
+
+      FDistanceJoint(nodeA: 'WebAnchorLeft', nodeB: 'WebNode_0', length: 100, frequency: 0, dampingRatio: 1.0),
+      for (int i = 0; i < 5; i++)
+        FDistanceJoint(nodeA: 'WebNode_$i', nodeB: 'WebNode_${i + 1}', length: 60, frequency: 0, dampingRatio: 1.0),
+      FDistanceJoint(nodeA: 'WebNode_5', nodeB: 'WebAnchorRight', length: 100, frequency: 0, dampingRatio: 1.0),
+    ];
+  }
+
+  Widget _buildSciFiHUD() {
+    return Positioned(
+      left: 20,
+      top: 20,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FCamera(position: v.Vector3(0, 0, 1000), isOrthographic: true, orthographicSize: 600.0),
-
-            // Ground
-            FStaticBody(
-              name: 'Ground',
-              position: v.Vector3(0, -350, 0),
-              width: 1000,
-              height: 40,
-              child: FBox(width: 1000, height: 40, color: Colors.grey[900]!),
+            _HUDLabel(text: 'SYSTEM: ACTIVE', color: Colors.cyanAccent),
+            const SizedBox(height: 8),
+            _HUDLabel(text: 'KINETIC SCULPTURE BETA v1.0', color: Colors.purpleAccent, isSmall: true),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _HUDMetric(label: 'HUB VELOCITY', value: '1.5 rad/s'),
+                  _HUDMetric(label: 'JOINT TENSION', value: 'STABLE'),
+                  _HUDMetric(label: 'NEON FLUX', value: 'OPTIMAL'),
+                ],
+              ),
             ),
-
-            // Demo content based on selection
-            if (selectedDemo == 0) ..._buildRopeBridge(),
-            if (selectedDemo == 1) ..._buildPendulum(),
-            if (selectedDemo == 2) ..._buildPiston(),
-            if (selectedDemo == 3) ..._buildRagdoll(),
-            if (selectedDemo == 4) ..._buildAllJoints(),
-
-            // HUD
-            _buildHUD(),
+            const SizedBox(height: 16),
+            _HUDLabel(text: 'TAP TO INJECT PARTICLES', color: Colors.yellowAccent, isSmall: true),
           ],
         ),
       ),
     );
   }
+}
 
-  // Demo 1: Rope Bridge (Distance Joints)
-  List<Widget> _buildRopeBridge() {
-    const segmentCount = 10;
-    const segmentSize = 30.0;
-    const spacing = 35.0;
+// --- VISUAL COMPONENTS ---
 
-    return [
-      // Left anchor
-      FStaticBody(
-        name: 'LeftAnchor',
-        position: v.Vector3(-200, 100, 0),
-        width: 20,
-        height: 20,
-        child: FBox(width: 20, height: 20, color: Colors.brown),
-      ),
+class _GlowNode extends StatelessWidget {
+  final Color color;
+  final double radius;
+  const _GlowNode({required this.color, required this.radius});
 
-      // Right anchor
-      FStaticBody(
-        name: 'RightAnchor',
-        position: v.Vector3(200, 100, 0),
-        width: 20,
-        height: 20,
-        child: FBox(width: 20, height: 20, color: Colors.brown),
-      ),
-
-      // Rope segments
-      for (int i = 0; i < segmentCount; i++)
-        FRigidBody.square(
-          key: ValueKey('rope_segment_$i'),
-          name: 'RopeSegment$i',
-          position: v.Vector3(-200 + spacing * (i + 1), 100, 0),
-          size: segmentSize,
-          child: FBox(width: segmentSize, height: segmentSize, color: Colors.orange.withValues(alpha: 0.8)),
-        ),
-
-      // Joints (Declarative)
-      FDistanceJoint(
-        name: 'Joint0',
-        nodeA: 'LeftAnchor',
-        nodeB: 'RopeSegment0',
-        length: spacing,
-        frequency: 5,
-        dampingRatio: 0.5,
-      ),
-      for (int i = 0; i < segmentCount - 1; i++)
-        FDistanceJoint(
-          name: 'Joint${i + 1}',
-          nodeA: 'RopeSegment$i',
-          nodeB: 'RopeSegment${i + 1}',
-          length: spacing,
-          frequency: 5,
-          dampingRatio: 0.5,
-        ),
-      FDistanceJoint(
-        name: 'JointLast',
-        nodeA: 'RopeSegment${segmentCount - 1}',
-        nodeB: 'RightAnchor',
-        length: spacing,
-        frequency: 5,
-        dampingRatio: 0.5,
-      ),
-
-      // Heavy weight in the middle
-      FRigidBody.circle(
-        key: const ValueKey('weight'),
-        name: 'Weight',
-        position: v.Vector3(0, 50, 0),
-        radius: 40,
-        child: FCircle(radius: 40, color: Colors.red),
-      ),
-      FDistanceJoint(
-        name: 'WeightJoint',
-        nodeA: 'RopeSegment4',
-        nodeB: 'Weight',
-        length: 100,
-        frequency: 2,
-        dampingRatio: 0.2,
-      ),
-    ];
-  }
-
-  // Demo 2: Pendulum (Revolute Joint)
-  List<Widget> _buildPendulum() {
-    return [
-      // Ceiling anchor
-      FStaticBody(
-        name: 'Ceiling',
-        position: v.Vector3(0, 200, 0),
-        width: 60,
-        height: 20,
-        child: FBox(width: 60, height: 20, color: Colors.grey[800]!),
-      ),
-
-      // Pendulum bob
-      FRigidBody.circle(
-        key: const ValueKey('pendulum_bob'),
-        name: 'PendulumBob',
-        position: v.Vector3(150, 0, 0),
-        radius: 50,
-        child: FCircle(radius: 50, color: Colors.blue),
-      ),
-
-      // Motorized wheel
-      FRigidBody.circle(
-        key: const ValueKey('motor_wheel'),
-        name: 'MotorWheel',
-        position: v.Vector3(-150, 100, 0),
-        radius: 60,
-        child: Container(
-          width: 120,
-          height: 120,
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Outer Blur
+        Container(
+          width: radius * 3,
+          height: radius * 3,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.purple,
-            border: Border.all(color: Colors.white, width: 3),
-          ),
-          child: const Center(child: Icon(Icons.settings, color: Colors.white, size: 40)),
-        ),
-      ),
-
-      // Motor anchor
-      FStaticBody(
-        name: 'MotorAnchor',
-        position: v.Vector3(-150, 100, 0),
-        width: 10,
-        height: 10,
-        child: FBox(width: 10, height: 10, color: Colors.yellow),
-      ),
-
-      // Pendulum Joint
-      FRevoluteJoint(name: 'PendulumJoint', nodeA: 'Ceiling', nodeB: 'PendulumBob', anchor: v.Vector2(0, 200)),
-
-      // Motorized Joint
-      FRevoluteJoint(
-        name: 'MotorJoint',
-        nodeA: 'MotorAnchor',
-        nodeB: 'MotorWheel',
-        anchor: v.Vector2(-150, 100),
-        enableMotor: true,
-        motorSpeed: 2.0,
-        maxMotorTorque: 10000.0,
-      ),
-    ];
-  }
-
-  // Demo 3: Piston (Prismatic Joint)
-  List<Widget> _buildPiston() {
-    return [
-      // Piston cylinder (static)
-      FStaticBody(
-        name: 'Cylinder',
-        position: v.Vector3(0, 0, 0),
-        width: 200,
-        height: 60,
-        child: Container(
-          width: 200,
-          height: 60,
-          decoration: BoxDecoration(
-            color: Colors.grey[700],
-            border: Border.all(color: Colors.grey[400]!, width: 3),
-            borderRadius: BorderRadius.circular(8),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 30, spreadRadius: 10)],
           ),
         ),
-      ),
-
-      // Piston head (moves)
-      FRigidBody.square(
-        key: const ValueKey('piston_head'),
-        name: 'PistonHead',
-        position: v.Vector3(0, 0, 0),
-        size: 50,
-        child: Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.orange,
-            border: Border.all(color: Colors.white, width: 2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: const Center(child: Icon(Icons.arrow_forward, color: Colors.white)),
-        ),
-      ),
-
-      // Elevator platform
-      FRigidBody(
-        key: const ValueKey('elevator'),
-        name: 'Elevator',
-        position: v.Vector3(200, 100, 0),
-        width: 100,
-        height: 20,
-        child: Container(
-          width: 100,
-          height: 20,
-          color: Colors.teal,
-          child: const Center(
-            child: Text('ELEVATOR', style: TextStyle(color: Colors.white, fontSize: 10)),
-          ),
-        ),
-      ),
-
-      // Elevator rail (static)
-      FStaticBody(
-        name: 'Rail',
-        position: v.Vector3(200, 0, 0),
-        width: 10,
-        height: 400,
-        child: FBox(width: 10, height: 400, color: Colors.grey[600]!.withValues(alpha: 0.5)),
-      ),
-
-      // Piston Joint
-      FPrismaticJoint(
-        name: 'PistonJoint',
-        nodeA: 'Cylinder',
-        nodeB: 'PistonHead',
-        axis: v.Vector2(1, 0),
-        enableLimit: true,
-        lowerTranslation: -80,
-        upperTranslation: 80,
-        enableMotor: true,
-        motorSpeed: 2.0,
-        maxMotorForce: 1000.0,
-      ),
-
-      // Elevator Joint
-      FPrismaticJoint(
-        name: 'ElevatorJoint',
-        nodeA: 'Rail',
-        nodeB: 'Elevator',
-        axis: v.Vector2(0, 1),
-        enableLimit: true,
-        lowerTranslation: -150,
-        upperTranslation: 150,
-        enableMotor: true,
-        motorSpeed: 3.0,
-        maxMotorForce: 5000.0,
-      ),
-    ];
-  }
-
-  // Demo 4: Ragdoll (Weld Joints)
-  List<Widget> _buildRagdoll() {
-    return [
-      // Head
-      FRigidBody.circle(
-        key: const ValueKey('head'),
-        name: 'Head',
-        position: v.Vector3(0, 150, 0),
-        radius: 30,
-        child: Container(
-          width: 60,
-          height: 60,
+        // Neon Ring
+        Container(
+          width: radius * 2,
+          height: radius * 2,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.pink[200],
-            border: Border.all(color: Colors.black, width: 2),
-          ),
-          child: const Center(child: Text('😊', style: TextStyle(fontSize: 30))),
-        ),
-      ),
-
-      // Torso
-      FRigidBody(
-        key: const ValueKey('torso'),
-        name: 'Torso',
-        position: v.Vector3(0, 80, 0),
-        width: 50,
-        height: 80,
-        child: Container(
-          width: 50,
-          height: 80,
-          decoration: BoxDecoration(
-            color: Colors.blue[300],
-            border: Border.all(color: Colors.black, width: 2),
-            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color, width: 2),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.8), blurRadius: 15, spreadRadius: 2)],
           ),
         ),
-      ),
-
-      // Left arm
-      FRigidBody(
-        key: const ValueKey('left_arm'),
-        name: 'LeftArm',
-        position: v.Vector3(-50, 100, 0),
-        width: 15,
-        height: 60,
-        child: FBox(width: 15, height: 60, color: Colors.pink[300]!),
-      ),
-
-      // Right arm
-      FRigidBody(
-        key: const ValueKey('right_arm'),
-        name: 'RightArm',
-        position: v.Vector3(50, 100, 0),
-        width: 15,
-        height: 60,
-        child: FBox(width: 15, height: 60, color: Colors.pink[300]!),
-      ),
-
-      // Left leg
-      FRigidBody(
-        key: const ValueKey('left_leg'),
-        name: 'LeftLeg',
-        position: v.Vector3(-20, 0, 0),
-        width: 20,
-        height: 70,
-        child: FBox(width: 20, height: 70, color: Colors.blue[700]!),
-      ),
-
-      // Right leg
-      FRigidBody(
-        key: const ValueKey('right_leg'),
-        name: 'RightLeg',
-        position: v.Vector3(20, 0, 0),
-        width: 20,
-        height: 70,
-        child: FBox(width: 20, height: 70, color: Colors.blue[700]!),
-      ),
-
-      // Ragdoll Joints (Revolute for articulation)
-      FRevoluteJoint(
-        name: 'Neck',
-        nodeA: 'Torso',
-        nodeB: 'Head',
-        anchor: v.Vector2(0, 120),
-        enableLimit: true,
-        lowerAngle: -0.5,
-        upperAngle: 0.5,
-      ),
-      FRevoluteJoint(name: 'LeftShoulder', nodeA: 'Torso', nodeB: 'LeftArm', anchor: v.Vector2(-25, 110)),
-      FRevoluteJoint(name: 'RightShoulder', nodeA: 'Torso', nodeB: 'RightArm', anchor: v.Vector2(25, 110)),
-      FRevoluteJoint(name: 'LeftHip', nodeA: 'Torso', nodeB: 'LeftLeg', anchor: v.Vector2(-15, 45)),
-      FRevoluteJoint(name: 'RightHip', nodeA: 'Torso', nodeB: 'RightLeg', anchor: v.Vector2(15, 45)),
-    ];
-  }
-
-  // Demo 5: All Joints Combined
-  List<Widget> _buildAllJoints() {
-    return [
-      // Distance joint example (chain)
-      FStaticBody(
-        name: 'ChainAnchor',
-        position: v.Vector3(-300, 200, 0),
-        width: 20,
-        height: 20,
-        child: FBox(width: 20, height: 20, color: Colors.brown),
-      ),
-      for (int i = 0; i < 3; i++)
-        FRigidBody.circle(
-          key: ValueKey('chain_$i'),
-          name: 'Chain$i',
-          position: v.Vector3(-300, 150 - i * 40, 0),
-          radius: 15,
-          child: FCircle(radius: 15, color: Colors.grey),
-        ),
-
-      // Revolute joint example (spinning wheel)
-      FStaticBody(
-        name: 'WheelAnchor',
-        position: v.Vector3(-100, 100, 0),
-        width: 10,
-        height: 10,
-        child: FBox(width: 10, height: 10, color: Colors.red),
-      ),
-      FRigidBody.circle(
-        key: const ValueKey('wheel'),
-        name: 'Wheel',
-        position: v.Vector3(-100, 100, 0),
-        radius: 40,
-        child: Container(
-          width: 80,
-          height: 80,
+        // Hot Core
+        Container(
+          width: radius * 0.4,
+          height: radius * 0.4,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.green,
-            border: Border.all(color: Colors.white, width: 2),
+            color: Colors.white,
+            boxShadow: [BoxShadow(color: color, blurRadius: 10)],
           ),
         ),
-      ),
+      ],
+    );
+  }
+}
 
-      // Prismatic joint example (slider)
-      FRigidBody.square(
-        key: const ValueKey('slider'),
-        name: 'Slider',
-        position: v.Vector3(100, 100, 0),
-        size: 40,
-        child: FBox(width: 40, height: 40, color: Colors.orange),
-      ),
+class _NeonGear extends StatelessWidget {
+  final Color color;
+  final double size;
+  const _NeonGear({required this.color, this.size = 100});
 
-      // Weld joint example (connected boxes)
-      FRigidBody.square(
-        key: const ValueKey('weld1'),
-        name: 'Weld1',
-        position: v.Vector3(250, 100, 0),
-        size: 30,
-        child: FBox(width: 30, height: 30, color: Colors.purple),
-      ),
-      FRigidBody.square(
-        key: const ValueKey('weld2'),
-        name: 'Weld2',
-        position: v.Vector3(290, 100, 0),
-        size: 30,
-        child: FBox(width: 30, height: 30, color: Colors.pink),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Main structural ring
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 4),
+            boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)],
+          ),
+        ),
+        // Inner detail ring
+        Container(
+          width: size * 0.7,
+          height: size * 0.7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withOpacity(0.5), width: 1),
+          ),
+        ),
+        // Mechanical spokes
+        for (int i = 0; i < 4; i++)
+          Transform.rotate(
+            angle: (i * math.pi / 4),
+            child: Container(width: size, height: 2, color: color.withOpacity(0.6)),
+          ),
+        // Glowing Hub
+        Container(
+          width: size * 0.2,
+          height: size * 0.2,
+          decoration: BoxDecoration(
+            color: color,
+            boxShadow: [BoxShadow(color: Colors.white, blurRadius: 10)],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-      // Joints (All types)
-      FDistanceJoint(name: 'ChainJoint0', nodeA: 'ChainAnchor', nodeB: 'Chain0', length: 50),
-      FDistanceJoint(name: 'ChainJoint1', nodeA: 'Chain0', nodeB: 'Chain1', length: 40),
-      FDistanceJoint(name: 'ChainJoint2', nodeA: 'Chain1', nodeB: 'Chain2', length: 40),
+class _NeonGrid extends StatelessWidget {
+  const _NeonGrid();
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(child: CustomPaint(painter: _GridPainter()));
+  }
+}
 
-      FRevoluteJoint(
-        name: 'WheelJoint',
-        nodeA: 'WheelAnchor',
-        nodeB: 'Wheel',
-        anchor: v.Vector2(-100, 100),
-        enableMotor: true,
-        motorSpeed: 1.0,
-        maxMotorTorque: 5000,
-      ),
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.05)
+      ..strokeWidth = 1.0;
 
-      FPrismaticJoint(name: 'SliderJoint', nodeA: 'Ground', nodeB: 'Slider', axis: v.Vector2(1, 0)),
-
-      FWeldJoint(name: 'WeldJoint', nodeA: 'Weld1', nodeB: 'Weld2', anchor: v.Vector2(270, 100)),
-    ];
+    for (double i = 0; i < size.width; i += 50) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (double i = 0; i < size.height; i += 50) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
   }
 
-  Widget _buildHUD() {
-    final descriptions = [
-      'Distance joints connect bodies with a spring-like constraint. Great for ropes, chains, and bridges.',
-      'Revolute joints allow rotation around a point. Perfect for hinges, wheels, and pendulums. Supports motors!',
-      'Prismatic joints constrain movement to a single axis. Ideal for pistons, elevators, and sliders.',
-      'Weld joints rigidly connect bodies. Used for ragdolls, compound shapes, and fixed structures.',
-      'All joint types working together in harmony!',
-    ];
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
 
-    return Positioned(
-      left: 20,
-      bottom: 20,
-      right: 20,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.black87,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.cyanAccent, width: 2),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.link, color: Colors.cyanAccent, size: 24),
-                const SizedBox(width: 12),
-                Text(
-                  demoNames[selectedDemo].toUpperCase(),
-                  style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ],
+class _HUDLabel extends StatelessWidget {
+  final String text;
+  final Color color;
+  final bool isSmall;
+  const _HUDLabel({required this.text, required this.color, this.isSmall = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontFamily: 'Courier',
+        fontWeight: FontWeight.bold,
+        fontSize: isSmall ? 10 : 16,
+        letterSpacing: 2,
+      ),
+    );
+  }
+}
+
+class _HUDMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  const _HUDMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(color: Colors.white54, fontSize: 9, fontFamily: 'Courier'),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontFamily: 'Courier',
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(height: 12),
-            Text(descriptions[selectedDemo], style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            const SizedBox(height: 12),
-            const Divider(color: Colors.cyanAccent, height: 1),
-            const SizedBox(height: 12),
-            const Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.amberAccent, size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Powered by Native C++ Engine with FFI.',
-                    style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontStyle: FontStyle.italic),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
