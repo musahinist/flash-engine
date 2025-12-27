@@ -44,7 +44,7 @@ PhysicsWorld* create_physics_world(int maxBodies) {
     world->activeConstraints = 0;
     
     world->gravityX = 0;
-    world->gravityY = -9.81f * 100.0f; 
+    world->gravityY = -9.81f * 100.0f; // Y-Up coordinate system: Gravity is negative 
     
     // Box2D-inspired solver configuration
     world->velocityIterations = 8;  // Box2D default

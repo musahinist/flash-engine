@@ -43,6 +43,12 @@ class FlashEngine extends ChangeNotifier {
   double _fpsLastMeasureTime = 0.0;
 
   FlashEngine() {
+    // Ensure native libraries are loaded
+    try {
+      FlashNativeParticles.init();
+    } catch (e) {
+      print('Failed to initialize native particles: $e');
+    }
     _ticker = Ticker(_tick);
   }
 

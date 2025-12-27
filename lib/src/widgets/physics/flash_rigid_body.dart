@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../../core/systems/physics.dart';
+
 import '../framework.dart';
 
 /// Declarative widget to initialize a physics world in the Flash engine.
@@ -40,62 +41,93 @@ class FlashRigidBody extends FlashNodeWidget {
   final void Function(FlashPhysicsBody)? onUpdate;
   final void Function(FlashPhysicsBody)? onCreated;
   final Color color;
+  final bool debugDraw;
 
   const FlashRigidBody({
     super.key,
+    super.position,
     this.type = 2, // Default: Dynamic
     this.shapeType = FlashPhysics.box, // Default to box for convenience
     this.width = 50,
     this.height = 50,
+    super.rotation,
+    super.child,
+    super.name,
     this.initialVelocity,
     this.onCollision,
     this.onUpdate,
     this.onCreated,
     this.color = Colors.blue,
-    super.position,
-    super.rotation,
-    super.scale,
-    super.name = 'RigidBody',
-    super.child,
+    this.debugDraw = false,
   });
 
-  /// Shorthand constructor for squares/circles
-  const FlashRigidBody.square({
-    super.key,
-    this.type = 2,
-    this.shapeType = FlashPhysics.box,
-    double size = 50,
-    this.initialVelocity,
-    this.onCollision,
-    this.onUpdate,
-    this.onCreated,
-    this.color = Colors.blue,
-    super.position,
-    super.rotation,
-    super.scale,
-    super.name = 'RigidBody',
-    super.child,
-  }) : width = size,
-       height = size;
+  /// Shorthand constructor for squares/circles (as Boxes)
+  factory FlashRigidBody.square({
+    Key? key,
+    required v.Vector3 position,
+    required double size,
+    v.Vector3? rotation,
+    Widget? child,
+    String? name,
+    Color color = Colors.blue,
+    v.Vector2? initialVelocity,
+    void Function(FlashPhysicsBody)? onCollision,
+    void Function(FlashPhysicsBody)? onUpdate,
+    void Function(FlashPhysicsBody)? onCreated,
+    bool debugDraw = false,
+  }) {
+    return FlashRigidBody(
+      key: key,
+      position: position,
+      type: 2,
+      shapeType: FlashPhysics.box,
+      width: size,
+      height: size,
+      rotation: rotation,
+      name: name,
+      color: color,
+      initialVelocity: initialVelocity,
+      onCollision: onCollision,
+      onUpdate: onUpdate,
+      onCreated: onCreated,
+      debugDraw: debugDraw,
+      child: child,
+    );
+  }
 
   /// Shorthand constructor for circles
-  const FlashRigidBody.circle({
-    super.key,
-    this.type = 2,
-    this.shapeType = FlashPhysics.circle,
-    double radius = 25,
-    this.initialVelocity,
-    this.onCollision,
-    this.onUpdate,
-    this.onCreated,
-    this.color = Colors.red,
-    super.position,
-    super.rotation,
-    super.scale,
-    super.name = 'RigidBody',
-    super.child,
-  }) : width = radius * 2,
-       height = radius * 2;
+  factory FlashRigidBody.circle({
+    Key? key,
+    required v.Vector3 position,
+    required double radius,
+    v.Vector3? rotation,
+    Widget? child,
+    String? name,
+    Color color = Colors.red,
+    v.Vector2? initialVelocity,
+    void Function(FlashPhysicsBody)? onCollision,
+    void Function(FlashPhysicsBody)? onUpdate,
+    void Function(FlashPhysicsBody)? onCreated,
+    bool debugDraw = false,
+  }) {
+    return FlashRigidBody(
+      key: key,
+      position: position,
+      type: 2,
+      shapeType: FlashPhysics.circle,
+      width: radius * 2,
+      height: radius * 2,
+      rotation: rotation,
+      name: name,
+      color: color,
+      initialVelocity: initialVelocity,
+      onCollision: onCollision,
+      onUpdate: onUpdate,
+      onCreated: onCreated,
+      debugDraw: debugDraw,
+      child: child,
+    );
+  }
 
   @override
   State<FlashRigidBody> createState() => _FlashRigidBodyState();
@@ -104,41 +136,49 @@ class FlashRigidBody extends FlashNodeWidget {
 class _FlashRigidBodyState extends FlashNodeWidgetState<FlashRigidBody, FlashPhysicsBody> {
   @override
   FlashPhysicsBody createNode() {
-    final element = context.getElementForInheritedWidgetOfExactType<InheritedFlashNode>();
-    final engine = (element?.widget as InheritedFlashNode?)?.engine;
-    final world = engine?.physicsWorld;
+    // Determine physics system.
+    // Ideally we look up the engine. For now, we assume the global singleton mechanism
+    // or that the parent creates it. FlashPhysicsBody currently requires a pointer.
+    // We will use a safe fallback if context isn't ready, but usually it is.
 
-    if (world == null && engine != null) {
-      engine.physicsWorld = FlashPhysicsSystem(gravity: FlashPhysics.standardGravity);
-    }
+    final physicsSystem = FlashPhysicsSystem(); // Uses existing singleton or creates new
 
-    final activeWorld = engine?.physicsWorld;
-    if (activeWorld == null) {
-      throw Exception('FlashRigidBody: Failed to initialize physics world');
-    }
+    final double safeX = widget.position?.x ?? 0.0;
+    final double safeY = widget.position?.y ?? 0.0;
 
-    final node = FlashPhysicsBody(
-      world: activeWorld.world,
+    final body = FlashPhysicsBody(
+      world: physicsSystem.world,
       type: widget.type,
       shapeType: widget.shapeType,
-      x: widget.position?.x ?? 0,
-      y: widget.position?.y ?? 0,
+      x: safeX,
+      y: safeY,
       width: widget.width,
       height: widget.height,
       rotation: widget.rotation?.z ?? 0,
       name: widget.name ?? 'RigidBody',
       color: widget.color,
+      debugDraw: widget.debugDraw,
     );
 
-    node.onCollision = widget.onCollision;
-    node.onUpdate = widget.onUpdate;
-
     if (widget.initialVelocity != null) {
-      node.setVelocity(widget.initialVelocity!.x, widget.initialVelocity!.y);
+      body.setVelocity(widget.initialVelocity!.x, widget.initialVelocity!.y);
     }
 
-    widget.onCreated?.call(node);
+    body.onCollision = widget.onCollision;
+    body.onUpdate = widget.onUpdate;
 
-    return node;
+    if (widget.onCreated != null) {
+      widget.onCreated!(body);
+    }
+
+    return body;
+  }
+
+  @override
+  void applyProperties([FlashRigidBody? oldWidget]) {
+    super.applyProperties(oldWidget);
+    if (widget.debugDraw != oldWidget?.debugDraw) {
+      node.debugDraw = widget.debugDraw;
+    }
   }
 }

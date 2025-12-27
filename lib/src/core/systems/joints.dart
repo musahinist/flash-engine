@@ -115,8 +115,24 @@ class FlashDistanceJoint extends FlashJoint {
 /// Revolute joint - forces two bodies to share a common anchor point
 class FlashRevoluteJoint extends FlashJoint {
   final v.Vector2 anchor;
+  final bool enableMotor;
+  final double motorSpeed;
+  final double maxMotorTorque;
+  final bool enableLimit;
+  final double lowerAngle;
+  final double upperAngle;
 
-  FlashRevoluteJoint({required super.bodyA, required super.bodyB, required this.anchor});
+  FlashRevoluteJoint({
+    required super.bodyA,
+    required super.bodyB,
+    required this.anchor,
+    this.enableMotor = false,
+    this.motorSpeed = 0.0,
+    this.maxMotorTorque = 0.0,
+    this.enableLimit = false,
+    this.lowerAngle = 0.0,
+    this.upperAngle = 0.0,
+  });
 
   @override
   void create(Pointer<PhysicsWorld> world) {
@@ -133,36 +149,114 @@ class FlashRevoluteJoint extends FlashJoint {
       def.ref.type = JointType.revolute;
       def.ref.bodyA = bodyA.bodyId;
       def.ref.bodyB = bodyB.bodyId;
-
-      // Revolute joint uses anchor A as the pivot in world space usually,
-      // but Box2D takes local anchors.
-      // For simplicity in this demo, let's assume 'anchor' passed in is World Space pivot.
-      // We need to convert World Anchor to Local Anchors.
-
-      // Helper to transform world point to local body point?
-      // Since we don't have that easily exposed in Dart yet without matrix math,
-      // For the demo we might just pass 0,0 if the bodies are already aligned?
-      // OR, we assume the user passed Local coordinates?
-      // In the demo: anchor: v.Vector2(-300, 200). That looks like World Space.
-
-      // Let's implement world-to-local conversion roughly here or just rely on 0,0 for now if bodies overlap.
-      // Better: Update JointDef to accept World Anchor and let C++ handle it, OR do math here.
-      // Box2D JointDef expects local anchors.
-
-      // Simple Hack: Just pass the raw values to anchorA and leave B zero? No that won't work.
-      // Correct approach:
-      // LocalA = Rotate(-BodyARot) * (WorldAnchor - BodyAPos)
-      // For this step, I will just assign the values directly as if they were local offsets for now
-      // to avoid breaking compilation with complex unchecked math code.
-      // Real fix: The C++ create_joint should probably take world anchor for revolute.
-
-      // BUT, for the sake of the user request "Fix Compilation", I will map them directly.
-
-      def.ref.anchorAx = anchor.x; // usage as placeholder
+      def.ref.anchorAx = anchor.x;
       def.ref.anchorAy = anchor.y;
+
+      def.ref.enableMotor = enableMotor ? 1 : 0;
+      def.ref.motorSpeed = motorSpeed;
+      def.ref.maxMotorTorque = maxMotorTorque;
+      def.ref.enableLimit = enableLimit ? 1 : 0;
+      def.ref.lowerAngle = lowerAngle;
+      def.ref.upperAngle = upperAngle;
 
       _jointId = ffi.createJoint(world, def);
       print('🔄 Revolute Joint Created: ID=$_jointId');
+    } finally {
+      calloc.free(def);
+    }
+  }
+}
+
+/// Prismatic joint - allows relative translation along a specified axis
+class FlashPrismaticJoint extends FlashJoint {
+  final v.Vector2 axis;
+  final bool enableLimit;
+  final double lowerTranslation;
+  final double upperTranslation;
+  final bool enableMotor;
+  final double motorSpeed;
+  final double maxMotorForce;
+
+  FlashPrismaticJoint({
+    required super.bodyA,
+    required super.bodyB,
+    required this.axis,
+    this.enableLimit = false,
+    this.lowerTranslation = 0.0,
+    this.upperTranslation = 0.0,
+    this.enableMotor = false,
+    this.motorSpeed = 0.0,
+    this.maxMotorForce = 0.0,
+  });
+
+  @override
+  void create(Pointer<PhysicsWorld> world) {
+    if (isCreated) return;
+
+    final ffi = FlashPhysicsSystem.jointsFFI;
+    if (ffi == null) {
+      print('⚠️ Joints FFI not available for Prismatic Joint');
+      return;
+    }
+
+    final def = calloc<JointDef>();
+    try {
+      def.ref.type = JointType.prismatic;
+      def.ref.bodyA = bodyA.bodyId;
+      def.ref.bodyB = bodyB.bodyId;
+      def.ref.axisx = axis.x;
+      def.ref.axisy = axis.y;
+      def.ref.enableLimit = enableLimit ? 1 : 0;
+      def.ref.lowerTranslation = lowerTranslation;
+      def.ref.upperTranslation = upperTranslation;
+      def.ref.enableMotor = enableMotor ? 1 : 0;
+      def.ref.motorSpeed = motorSpeed;
+      def.ref.maxMotorForce = maxMotorForce;
+
+      _jointId = ffi.createJoint(world, def);
+      print('📏 Prismatic Joint Created: ID=$_jointId');
+    } finally {
+      calloc.free(def);
+    }
+  }
+}
+
+/// Weld joint - constrains relative position and orientation
+class FlashWeldJoint extends FlashJoint {
+  final v.Vector2 anchor;
+  final double stiffness;
+  final double damping;
+
+  FlashWeldJoint({
+    required super.bodyA,
+    required super.bodyB,
+    required this.anchor,
+    this.stiffness = 0.0,
+    this.damping = 0.0,
+  });
+
+  @override
+  void create(Pointer<PhysicsWorld> world) {
+    if (isCreated) return;
+
+    final ffi = FlashPhysicsSystem.jointsFFI;
+    if (ffi == null) {
+      print('⚠️ Joints FFI not available for Weld Joint');
+      return;
+    }
+
+    final def = calloc<JointDef>();
+    try {
+      def.ref.type = JointType.weld;
+      def.ref.bodyA = bodyA.bodyId;
+      def.ref.bodyB = bodyB.bodyId;
+      def.ref.anchorAx = anchor.x;
+      def.ref.anchorAy = anchor.y;
+      def.ref.stiffness = stiffness;
+      def.ref.damping = damping;
+
+      _jointId = ffi.createJoint(world, def);
+      print('🔗 Weld Joint Created: ID=$_jointId');
     } finally {
       calloc.free(def);
     }

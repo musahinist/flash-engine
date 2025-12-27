@@ -428,8 +428,8 @@ class _JointsDemoExampleState extends State<JointsDemoExample> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Note: Joint constraints are implemented in native C++ but FFI bindings are pending. Visual representation only.',
-                    style: TextStyle(color: Colors.amberAccent, fontSize: 11, fontStyle: FontStyle.italic),
+                    'Powered by Native C++ Engine with FFI.',
+                    style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontStyle: FontStyle.italic),
                   ),
                 ),
               ],

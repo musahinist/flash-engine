@@ -103,6 +103,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               width: 800,
               height: 40,
               color: Colors.grey[900]!,
+              onCreated: (body) => body.debugDraw = true,
             ),
 
             // Left anchor for rope
@@ -114,6 +115,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               color: Colors.brown,
               onCreated: (body) {
                 _leftAnchor = body;
+                body.debugDraw = true;
                 _checkAndCreateRope();
               },
             ),
@@ -127,6 +129,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               color: Colors.brown,
               onCreated: (body) {
                 _rightAnchor = body;
+                body.debugDraw = true;
                 _checkAndCreateRope();
               },
             ),
@@ -141,6 +144,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
                 color: Colors.orange,
                 onCreated: (body) {
                   _ropeSegments[i] = body;
+                  body.debugDraw = true;
                   _checkAndCreateRope();
                 },
               ),
@@ -154,6 +158,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               color: Colors.red,
               onCreated: (body) {
                 _ball = body;
+                body.debugDraw = true;
                 _checkAndCreateRope();
               },
             ),
@@ -167,6 +172,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               color: Colors.grey[800]!,
               onCreated: (body) {
                 _pendulumAnchor = body;
+                body.debugDraw = true;
                 _checkAndCreatePendulum();
               },
             ),
@@ -180,6 +186,7 @@ class _SimpleJointsDemoState extends State<SimpleJointsDemo> {
               color: Colors.blue,
               onCreated: (body) {
                 _pendulumBob = body;
+                body.debugDraw = true;
                 _checkAndCreatePendulum();
               },
             ),

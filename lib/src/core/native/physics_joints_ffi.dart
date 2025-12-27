@@ -96,7 +96,7 @@ class PhysicsJointsFFI {
   /// Load the native library
   static DynamicLibrary loadLibrary() {
     if (Platform.isIOS) {
-      return DynamicLibrary.process();
+      return DynamicLibrary.open('/Users/mshn/Documents/flash/lib/src/core/native/bin/libflash_core_sim.dylib');
     }
 
     String libPath;

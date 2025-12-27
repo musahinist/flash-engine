@@ -204,23 +204,25 @@ class FlashNativeParticles {
     if (_lib != null) return;
 
     // Determine library path
+    // Determine library path
+    // iOS Simulator support: Load the custom-built simulator dylib via absolute path
     if (Platform.isIOS) {
-      _lib = DynamicLibrary.process();
-      return;
-    }
-
-    String libPath;
-    if (Platform.isMacOS) {
-      libPath = '/Users/mshn/Documents/flash/lib/src/core/native/bin/$_libName';
-    } else if (Platform.isLinux || Platform.isAndroid) {
-      libPath = '/Users/mshn/Documents/flash/lib/src/core/native/bin/user/libflash_core.so';
-    } else if (Platform.isWindows) {
-      libPath = 'C:\\Users\\mshn\\Documents\\flash\\lib\\src\\core\\native\\bin\\libflash_core.dll';
+      // Note: This relies on the Simulator having access to the host filesystem (Debug mode)
+      final simLibPath = '/Users/mshn/Documents/flash/lib/src/core/native/bin/libflash_core_sim.dylib';
+      _lib = DynamicLibrary.open(simLibPath);
     } else {
-      throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+      String libPath;
+      if (Platform.isMacOS) {
+        libPath = '/Users/mshn/Documents/flash/lib/src/core/native/bin/$_libName';
+      } else if (Platform.isLinux || Platform.isAndroid) {
+        libPath = '/Users/mshn/Documents/flash/lib/src/core/native/bin/user/libflash_core.so';
+      } else if (Platform.isWindows) {
+        libPath = 'C:\\Users\\mshn\\Documents\\flash\\lib\\src\\core\\native\\bin\\libflash_core.dll';
+      } else {
+        throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+      }
+      _lib = DynamicLibrary.open(libPath);
     }
-
-    _lib = DynamicLibrary.open(libPath);
 
     // Particle Lookups
     updateParticles = _lib!.lookupFunction<UpdateParticlesC, UpdateParticlesDart>('update_particles');

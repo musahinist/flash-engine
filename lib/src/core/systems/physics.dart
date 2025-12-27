@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
@@ -17,17 +18,33 @@ class FlashPhysicsSystem {
 
   FlashPhysicsSystem({v.Vector2? gravity})
     : gravity = gravity ?? FlashPhysics.standardGravity,
-      // Pass initial capacity (e.g. 1000 bodies) instead of gravity
-      world = FlashNativeParticles.createPhysicsWorld!(2048) {
+      // Safety check for native initialization
+      world = _createWorldSafe(2048) {
     // Set gravity on the world struct directly
     world.ref.gravityX = this.gravity.x;
     world.ref.gravityY = this.gravity.y;
 
     // Initialize Joints FFI if not already done
-    if (_jointsFFI == null) {
-      final lib = PhysicsJointsFFI.loadLibrary();
-      _jointsFFI = PhysicsJointsFFI(lib);
+    if (_jointsFFI == null && Platform.isMacOS) {
+      // Only try loading joints lib on supported platform
+      try {
+        final lib = PhysicsJointsFFI.loadLibrary();
+        _jointsFFI = PhysicsJointsFFI(lib);
+      } catch (e) {
+        print('Failed to load joints library: $e');
+      }
     }
+  }
+
+  static Pointer<PhysicsWorld> _createWorldSafe(int capacity) {
+    if (FlashNativeParticles.createPhysicsWorld == null) {
+      throw UnsupportedError(
+        'Native physics functions not initialized.\n'
+        'This usually happens when running on a platform without the native library linked (e.g. iOS Simulator).\n'
+        '👉 PLEASE RUN ON MACOS DESKTOP: flutter run -d macos',
+      );
+    }
+    return FlashNativeParticles.createPhysicsWorld!(capacity);
   }
 
   void update(double dt) {
@@ -48,7 +65,9 @@ class FlashPhysics {
   // Conversion constants
   static const double pixelsToMeters = 1.0 / 50.0;
   static const double metersToPixels = 50.0;
-  static final v.Vector2 standardGravity = v.Vector2(0, 9.8 * 100);
+  // FlashPainter uses Y-Up coordinate system (0,0 in center, +Y is Up).
+  // So Gravity must be negative to pull things down.
+  static final v.Vector2 standardGravity = v.Vector2(0, -9.8 * 100);
 
   // Body Types
   static const int staticBody = 0;
@@ -80,6 +99,9 @@ class FlashPhysicsBody extends FlashNode {
   static final Pointer<Float> _posX = calloc<Float>();
   static final Pointer<Float> _posY = calloc<Float>();
 
+  // Mutable debug flag
+  bool debugDraw;
+
   FlashPhysicsBody({
     required Pointer<PhysicsWorld> world,
     int type = 2, // DYNAMIC
@@ -91,6 +113,7 @@ class FlashPhysicsBody extends FlashNode {
     this.rotation = 0,
     super.name = 'PhysicsBody',
     this.color = Colors.white,
+    this.debugDraw = false,
   }) : _world = world,
        bodyId = FlashNativeParticles.createBody!(world, type, shapeType, x, y, width, height, rotation) {
     _syncFromPhysics();
@@ -101,6 +124,8 @@ class FlashPhysicsBody extends FlashNode {
 
   @override
   void draw(Canvas canvas) {
+    if (!debugDraw) return;
+
     final paint = Paint()..color = color;
 
     // Detect shape from dimensions heuristic since we don't store shapeType yet.
