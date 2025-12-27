@@ -116,6 +116,12 @@ final class NativeBody extends Struct {
   external int categoryBits;
   @Uint32()
   external int maskBits;
+  @Int32()
+  external int proxyId;
+  @Int32()
+  external int isAwake;
+  @Int32()
+  external int islandId;
 }
 
 final class ParticleEmitter extends Struct {

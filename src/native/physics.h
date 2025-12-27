@@ -66,6 +66,9 @@ struct NativeBody {
     float sleepTime;     // Time body has been at rest
     uint32_t categoryBits;
     uint32_t maskBits;
+    int32_t proxyId;
+    int isAwake;
+    int islandId;
 };
 
 // Manifold for persistent contact tracking (Warm Starting)
@@ -113,8 +116,8 @@ struct PhysicsWorld {
     int maxJoints;
     int activeJoints;
     
-    // Broadphase spatial grid
-    struct SpatialHashGrid* spatialGrid;
+    // Broadphase dynamic tree
+    struct DynamicTree* tree;
     
     // Native Box2D-style Joints
     struct Joint* boxJoints;

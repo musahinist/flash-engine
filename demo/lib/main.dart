@@ -21,6 +21,8 @@ import 'examples/master_tech_demo.dart';
 import 'examples/raycast_demo.dart';
 import 'examples/timer_demo.dart';
 import 'examples/pendulum_demo.dart';
+import 'examples/soft_body_demo.dart';
+import 'examples/sandbox_demo.dart';
 
 void main() {
   runApp(const FlashDemoApp());
@@ -84,6 +86,18 @@ class ExampleMenu extends StatelessWidget {
         description: "Newton's Cradle physics.",
         icon: Icons.unfold_more_double_rounded,
         builder: (_) => const PendulumDemoExample(),
+      ),
+      _ExampleData(
+        title: 'Neon Jelly',
+        description: 'Soft body physics blob.',
+        icon: Icons.vignette_rounded,
+        builder: (_) => const SoftBodyDemoExample(),
+      ),
+      _ExampleData(
+        title: 'Neon Sandbox',
+        description: 'Draw lines & drop objects.',
+        icon: Icons.architecture_rounded,
+        builder: (_) => const SandboxDemoExample(),
       ),
       _ExampleData(
         title: '2.5D Diorama',

@@ -24,19 +24,26 @@ struct AABB {
     }
 };
 
-// Spatial hash grid cell
-struct GridCell {
-    std::vector<uint32_t> bodyIds;
+// Node for the dynamic AABB tree
+struct TreeNode {
+    AABB aabb;
+    uint32_t bodyId; // 0xFFFFFFFF if internal node
+    int32_t parent;
+    int32_t left;
+    int32_t right;
+    int32_t height; // For AVL balancing
+    int32_t next;   // For free list
+    
+    bool isLeaf() const { return right == -1; }
 };
 
-// Spatial hash grid for broadphase collision detection
-struct SpatialHashGrid {
-    GridCell* cells;
-    int gridWidth;
-    int gridHeight;
-    float cellSize;
-    float worldMinX, worldMinY;
-    float worldMaxX, worldMaxY;
+// Dynamic AABB Tree structure
+struct DynamicTree {
+    TreeNode* nodes;
+    int32_t root;
+    int32_t nodeCount;
+    int32_t nodeCapacity;
+    int32_t freeList;
     
     // Pair cache to avoid duplicate collision checks
     std::vector<uint64_t> pairs;
@@ -48,22 +55,23 @@ struct BroadphasePair {
     uint32_t bodyB;
 };
 
-// Create spatial hash grid
-SpatialHashGrid* create_spatial_grid(float worldMinX, float worldMinY, 
-                                     float worldMaxX, float worldMaxY, 
-                                     float cellSize);
+// Create dynamic tree
+DynamicTree* create_dynamic_tree(int initialCapacity);
 
-// Destroy spatial hash grid
-void destroy_spatial_grid(SpatialHashGrid* grid);
+// Destroy dynamic tree
+void destroy_dynamic_tree(DynamicTree* tree);
 
-// Clear grid for new frame
-void clear_spatial_grid(SpatialHashGrid* grid);
+// Insert a body into the tree and return a proxy ID
+int32_t tree_insert_leaf(DynamicTree* tree, uint32_t bodyId, const AABB& aabb);
 
-// Insert body into grid
-void insert_into_grid(SpatialHashGrid* grid, uint32_t bodyId, const AABB& aabb);
+// Remove a leaf from the tree
+void tree_remove_leaf(DynamicTree* tree, int32_t proxyId);
 
-// Query grid for potential collision pairs
-int query_grid_pairs(SpatialHashGrid* grid, BroadphasePair* outPairs, int maxPairs);
+// Update a leaf (move/resize)
+int32_t tree_update_leaf(DynamicTree* tree, int32_t proxyId, const AABB& aabb);
+
+// Query tree for potential collision pairs against all bodies
+int query_tree_pairs(DynamicTree* tree, BroadphasePair* outPairs, int maxPairs);
 
 // Helper: Calculate AABB for a body
 AABB calculate_body_aabb(const struct NativeBody& body);

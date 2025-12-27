@@ -66,9 +66,8 @@ PhysicsWorld* create_physics_world(int maxBodies) {
     world->restitutionThreshold = 1.0f * 100.0f; // 1 m/s in pixels
     world->maxLinearVelocity = 2000.0f * 100.0f;  // 2000 m/s in pixels (prevent clamping issues)
     
-    // Create spatial hash grid for broadphase
-    // Default world bounds: -10000 to 10000 pixels, 200 pixel cells
-    world->spatialGrid = create_spatial_grid(-10000.0f, -10000.0f, 10000.0f, 10000.0f, 200.0f);
+    // Create dynamic AABB tree for broadphase
+    world->tree = create_dynamic_tree(maxBodies * 2);
     
     // Initialize Box2D joints
     world->maxBoxJoints = 100;  // Support up to 100 joints
@@ -83,7 +82,7 @@ void destroy_physics_world(PhysicsWorld* world) {
     delete[] world->bodies;
     delete[] world->manifolds;
     delete[] world->constraints;
-    destroy_spatial_grid(world->spatialGrid);
+    destroy_dynamic_tree(world->tree);
     delete[] world->boxJoints;
     delete world;
 }
@@ -179,29 +178,35 @@ CollisionManifold detectBoxBox(NativeBody& a, NativeBody& b) {
     m.collided = true;
     m.normal = bestAxis;
     m.penetration = minOverlap;
-    m.contactCount = 1;
+    m.contactCount = 0;
 
-    // Contact Point: Deepest vertex of incident body into reference body
-    float hw = inc->width * 0.5f;
-    float hh = inc->height * 0.5f;
-    Vec2 incPos = {inc->x, inc->y};
-    Vec2 incVerts[4] = {
-        incPos + rotate({-hw, -hh}, inc->rotation),
-        incPos + rotate({ hw, -hh}, inc->rotation),
-        incPos + rotate({ hw,  hh}, inc->rotation),
-        incPos + rotate({-hw,  hh}, inc->rotation)
+    // Stable Multi-point Contact: find vertices of 'inc' that overlap 'ref' on bestAxis
+    float hw_inc = inc->width * 0.5f, hh_inc = inc->height * 0.5f;
+    Vec2 pos_inc = {inc->x, inc->y};
+    Vec2 v_inc[4] = {
+        pos_inc + rotate({-hw_inc, -hh_inc}, inc->rotation),
+        pos_inc + rotate({ hw_inc, -hh_inc}, inc->rotation),
+        pos_inc + rotate({ hw_inc,  hh_inc}, inc->rotation),
+        pos_inc + rotate({-hw_inc,  hh_inc}, inc->rotation)
     };
 
-    float minDot = 1e10f;
-    Vec2 deepest;
-    for(int i=0; i<4; ++i) {
-        float dot = bestAxis.dot(incVerts[i]);
-        if (dot < minDot) {
-            minDot = dot;
-            deepest = incVerts[i];
+    float minA, maxA;
+    project(*ref, bestAxis, minA, maxA);
+
+    for (int i = 0; i < 4; ++i) {
+        float p = bestAxis.dot(v_inc[i]);
+        // If vertex is inside reference body's SAT projection (with slop)
+        if (p <= maxA + 0.01f) {
+            m.contacts[m.contactCount++] = v_inc[i] + (bestAxis * (minOverlap * 0.5f));
+            if (m.contactCount >= 2) break;
         }
     }
-    m.contacts[0] = deepest + (bestAxis * (minOverlap * 0.5f));
+    
+    if (m.contactCount == 0) {
+        // Fallback for safety
+        m.contactCount = 1;
+        m.contacts[0] = {inc->x, inc->y};
+    }
     return m;
 }
 
@@ -274,49 +279,24 @@ CollisionManifold detectCircleBox(NativeBody& circle, NativeBody& box) {
 void step_physics(PhysicsWorld* world, float dt) {
     if (!world || world->activeCount == 0 || dt <= 0) return;
 
-    // Calculate softness for this time step
-    Softness contactSoftness = makeSoftness(world->contactHertz, world->contactDampingRatio, dt);
-    
-    // Phase 1: Integrate forces and velocities
+    // Phase 1: Update Broadphase Tree
     for (int i = 0; i < world->activeCount; ++i) {
         NativeBody& b = world->bodies[i];
-        if (b.type == STATIC) continue;
-
-        // Apply gravity and forces
-        b.vx += (world->gravityX + b.forceX * b.inverseMass) * dt;
-        b.vy += (world->gravityY + b.forceY * b.inverseMass) * dt;
-        b.angularVelocity += (b.torque * b.inverseInertia) * dt;
-        
-        // Clamp velocity for stability
-        float speedSq = b.vx * b.vx + b.vy * b.vy;
-        if (speedSq > world->maxLinearVelocity * world->maxLinearVelocity) {
-            float speed = std::sqrt(speedSq);
-            float ratio = world->maxLinearVelocity / speed;
-            b.vx *= ratio;
-            b.vy *= ratio;
-        }
-        
-        b.forceX = b.forceY = b.torque = 0;
         b.collision_count = 0;
+        if (b.type == STATIC) continue;
+        
+        AABB aabb = calculate_body_aabb(b);
+        // Important: Update proxyId as tree_insert_leaf returns a new ID
+        b.proxyId = tree_update_leaf(world->tree, b.proxyId, aabb);
     }
 
-    // Phase 2: Build contact constraints using broadphase
     world->activeConstraints = 0;
-    
-    // Clear and populate spatial grid
-    clear_spatial_grid(world->spatialGrid);
-    for (int i = 0; i < world->activeCount; ++i) {
-        NativeBody& body = world->bodies[i];
-        AABB aabb = calculate_body_aabb(body);
-        insert_into_grid(world->spatialGrid, i, aabb);
-    }
-    
-    // Query broadphase for potential collision pairs
-    const int maxPairs = world->maxConstraints;
+    const int maxPairs = world->maxBodies * 8; // Increased for complex scenes
     BroadphasePair* pairs = new BroadphasePair[maxPairs];
-    int pairCount = query_grid_pairs(world->spatialGrid, pairs, maxPairs);
-    
-    // Process each potential collision pair
+    int pairCount = query_tree_pairs(world->tree, pairs, maxPairs);
+
+    Softness contactSoftness = makeSoftness(world->contactHertz, world->contactDampingRatio, dt);
+
     for (int p = 0; p < pairCount && world->activeConstraints < world->maxConstraints; ++p) {
         int i = pairs[p].bodyA;
         int j = pairs[p].bodyB;
@@ -324,262 +304,177 @@ void step_physics(PhysicsWorld* world, float dt) {
         NativeBody& a = world->bodies[i];
         NativeBody& b = world->bodies[j];
         if (a.type == STATIC && b.type == STATIC) continue;
+        if (!((a.maskBits & b.categoryBits) != 0 && (b.maskBits & a.categoryBits) != 0)) continue;
 
-        // Collision Filtering (Box2D-style)
-        // (a.maskBits & b.categoryBits) != 0 && (b.maskBits & a.categoryBits) != 0
-        if (!((a.maskBits & b.categoryBits) != 0 && (b.maskBits & a.categoryBits) != 0)) {
-            continue;
-        }
-
-        // Detect collision
         CollisionManifold m = {{0,0}, 0, {{0,0}}, 0, false};
         if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_CIRCLE) m = detectCircleCircle(a, b);
         else if (a.shapeType == SHAPE_BOX && b.shapeType == SHAPE_BOX) m = detectBoxBox(a, b);
         else if (a.shapeType == SHAPE_CIRCLE) m = detectCircleBox(a, b);
-        else { m = detectCircleBox(b, a); } // Correct normal (A->B) returned directly
+        else { m = detectCircleBox(b, a); }
 
         if (!m.collided) continue;
-        
-        // Fix normal direction for circle-box
-        if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_BOX) {
-            m.normal = m.normal * -1.0f;
-        }
+        if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_BOX) m.normal = m.normal * -1.0f;
 
-        // Create contact constraint
         ContactConstraint& constraint = world->constraints[world->activeConstraints++];
         constraint.bodyA = i;
         constraint.bodyB = j;
         constraint.normalX = m.normal.x;
         constraint.normalY = m.normal.y;
         constraint.friction = std::sqrt(a.friction * b.friction);
-        constraint.restitution = std::max(a.restitution, b.restitution);
+        
+        // Restitution with threshold
+        float relV = (Vec2{b.vx, b.vy} - Vec2{a.vx, a.vy}).dot(m.normal);
+        constraint.restitution = (relV < -world->restitutionThreshold) ? std::max(a.restitution, b.restitution) : 0.0f;
+        
         constraint.pointCount = m.contactCount;
         constraint.softness = contactSoftness;
-        constraint.rollingResistance = 0.0f;
 
-        // Prepare contact points
         for (int c = 0; c < m.contactCount; ++c) {
             ContactConstraintPoint& cp = constraint.points[c];
-            
-            // Anchor points (relative to body centers)
             cp.anchorAx = m.contacts[c].x - a.x;
             cp.anchorAy = m.contacts[c].y - a.y;
             cp.anchorBx = m.contacts[c].x - b.x;
             cp.anchorBy = m.contacts[c].y - b.y;
-            
             cp.baseSeparation = -m.penetration;
             
-            // Calculate effective masses
-            Vec2 ra = {cp.anchorAx, cp.anchorAy};
-            Vec2 rb = {cp.anchorBx, cp.anchorBy};
-            Vec2 normal = {m.normal.x, m.normal.y};
-            
-            float raCrossN = ra.cross(normal);
-            float rbCrossN = rb.cross(normal);
-            float kNormal = a.inverseMass + b.inverseMass + 
-                           raCrossN * raCrossN * a.inverseInertia + 
-                           rbCrossN * rbCrossN * b.inverseInertia;
-            
-            // Apply softness to effective mass
-            kNormal += contactSoftness.massScale;
-            cp.normalMass = kNormal > 0.0f ? 1.0f / kNormal : 0.0f;
-            
-            // Tangent mass
+            Vec2 ra = {cp.anchorAx, cp.anchorAy}, rb = {cp.anchorBx, cp.anchorBy}, normal = {m.normal.x, m.normal.y};
+            float raN = ra.cross(normal), rbN = rb.cross(normal);
+            float kN = a.inverseMass + b.inverseMass + raN * raN * a.inverseInertia + rbN * rbN * b.inverseInertia + contactSoftness.massScale;
+            cp.normalMass = kN > 0.0f ? 1.0f / kN : 0.0f;
+
             Vec2 tangent = {-normal.y, normal.x};
-            float raCrossT = ra.cross(tangent);
-            float rbCrossT = rb.cross(tangent);
-            float kTangent = a.inverseMass + b.inverseMass +
-                            raCrossT * raCrossT * a.inverseInertia +
-                            rbCrossT * rbCrossT * b.inverseInertia;
-            cp.tangentMass = kTangent > 0.0f ? 1.0f / kTangent : 0.0f;
-            
-            // Initialize impulses (will be set by warm starting or zero)
-            cp.normalImpulse = 0.0f;
-            cp.tangentImpulse = 0.0f;
+            float raT = ra.cross(tangent), rbT = rb.cross(tangent);
+            float kT = a.inverseMass + b.inverseMass + raT * raT * a.inverseInertia + rbT * rbT * b.inverseInertia;
+            cp.tangentMass = kT > 0.0f ? 1.0f / kT : 0.0f;
+            cp.normalImpulse = cp.tangentImpulse = 0.0f;
         }
-        
-        a.collision_count++;
-        b.collision_count++;
+        a.collision_count++; b.collision_count++;
     }
-    
     delete[] pairs;
 
-    // Phase 3: Warm start (apply cached impulses)
-    if (world->enableWarmStarting) {
-        for (int i = 0; i < world->activeConstraints; ++i) {
-            ContactConstraint& c = world->constraints[i];
-            NativeBody& a = world->bodies[c.bodyA];
-            NativeBody& b = world->bodies[c.bodyB];
-            Vec2 normal = {c.normalX, c.normalY};
-            Vec2 tangent = {-normal.y, normal.x};
-            
-            for (int j = 0; j < c.pointCount; ++j) {
-                ContactConstraintPoint& cp = c.points[j];
-                Vec2 ra = {cp.anchorAx, cp.anchorAy};
-                Vec2 rb = {cp.anchorBx, cp.anchorBy};
-                
-                // Scale cached impulses by softness
-                Vec2 P = normal * (cp.normalImpulse * c.softness.impulseScale) + 
-                        tangent * (cp.tangentImpulse * c.softness.impulseScale);
-                
-                if (a.type == DYNAMIC) {
-                    a.vx -= P.x * a.inverseMass;
-                    a.vy -= P.y * a.inverseMass;
-                    a.angularVelocity -= ra.cross(P) * a.inverseInertia;
-                }
-                if (b.type == DYNAMIC) {
-                    b.vx += P.x * b.inverseMass;
-                    b.vy += P.y * b.inverseMass;
-                    b.angularVelocity += rb.cross(P) * b.inverseInertia;
-                }
-            }
-        }
-    }
-    
-    // Phase 3.5: Initialize joint constraints
-    init_joint_velocity_constraints(world, dt);
-
-    // Phase 4: Velocity iterations (sequential impulse solver)
-    for (int iter = 0; iter < world->velocityIterations; ++iter) {
-        for (int i = 0; i < world->activeConstraints; ++i) {
-            ContactConstraint& c = world->constraints[i];
-            NativeBody& a = world->bodies[c.bodyA];
-            NativeBody& b = world->bodies[c.bodyB];
-            Vec2 normal = {c.normalX, c.normalY};
-            Vec2 tangent = {-normal.y, normal.x};
-            
-            for (int j = 0; j < c.pointCount; ++j) {
-                ContactConstraintPoint& cp = c.points[j];
-                Vec2 ra = {cp.anchorAx, cp.anchorAy};
-                Vec2 rb = {cp.anchorBx, cp.anchorBy};
-                
-                // Relative velocity at contact point
-                Vec2 va = {a.vx, a.vy};
-                Vec2 vb = {b.vx, b.vy};
-                Vec2 dv = (vb + cross(b.angularVelocity, rb)) - (va + cross(a.angularVelocity, ra));
-                
-                // Solve normal constraint
-                float vn = dv.dot(normal);
-                
-                // Calculate velocity bias (Baumgarte) matching Box2D
-                // Box2D: velocityBias = softness.massScale * softness.biasRate * s
-                // s is penetration (negative separation)
-                // cp.baseSeparation is negative for penetration
-                float separation = -cp.baseSeparation; // Convert to positive penetration? No, Box2D s is separation (negative for penetration)
-                // Actually constraint->points[j].baseSeparation in Box2D is separation.
-                // Box2D: s = separation - constraint->points[j].baseSeparation ? No.
-                // s is separation.
-                
-                // In my code: cp.baseSeparation = -m.penetration; (so it's negative)
-                // Box2D logic: velocityBias = b2MaxFloat( softness.massScale * softness.biasRate * s, -contactSpeed );
-                
-                float bias = c.softness.massScale * c.softness.biasRate * cp.baseSeparation;
-                
-                // Box2D Solver: 
-                // float impulse = -cp->normalMass * ( massScale * vn + velocityBias ) - impulseScale * cp->normalImpulse;
-                
-                float lambda = -cp.normalMass * (c.softness.massScale * vn + bias) - c.softness.impulseScale * cp.normalImpulse;
-                
-                // Clamp accumulated impulse
-                float newImpulse = std::max(cp.normalImpulse + lambda, 0.0f);
-                lambda = newImpulse - cp.normalImpulse;
-                cp.normalImpulse = newImpulse;
-                
-                // Apply impulse
-                Vec2 P = normal * lambda;
-                if (a.type == DYNAMIC) {
-                    a.vx -= P.x * a.inverseMass;
-                    a.vy -= P.y * a.inverseMass;
-                    a.angularVelocity -= ra.cross(P) * a.inverseInertia;
-                }
-                if (b.type == DYNAMIC) {
-                    b.vx += P.x * b.inverseMass;
-                    b.vy += P.y * b.inverseMass;
-                    b.angularVelocity += rb.cross(P) * b.inverseInertia;
-                }
-                
-                // Solve friction constraint
-                dv = (Vec2{b.vx, b.vy} + cross(b.angularVelocity, rb)) - 
-                     (Vec2{a.vx, a.vy} + cross(a.angularVelocity, ra));
-                float vt = dv.dot(tangent);
-                float lambdaT = -cp.tangentMass * vt;
-                
-                // Coulomb friction
-                float maxFriction = c.friction * cp.normalImpulse;
-                float newImpulseT = std::max(-maxFriction, std::min(cp.tangentImpulse + lambdaT, maxFriction));
-                lambdaT = newImpulseT - cp.tangentImpulse;
-                cp.tangentImpulse = newImpulseT;
-                
-                // Apply friction impulse
-                Vec2 Pt = tangent * lambdaT;
-                if (a.type == DYNAMIC) {
-                    a.vx -= Pt.x * a.inverseMass;
-                    a.vy -= Pt.y * a.inverseMass;
-                    a.angularVelocity -= ra.cross(Pt) * a.inverseInertia;
-                }
-                if (b.type == DYNAMIC) {
-                    b.vx += Pt.x * b.inverseMass;
-                    b.vy += Pt.y * b.inverseMass;
-                    b.angularVelocity += rb.cross(Pt) * b.inverseInertia;
-                }
-            }
-        }
-        
-        // Solve joint velocity constraints
-        solve_joint_velocity_constraints(world);
-    }
-
-    // Phase 5: Integrate positions
+    // Phase 2: Integrate Velocities & Apply Sleep
     for (int i = 0; i < world->activeCount; ++i) {
         NativeBody& b = world->bodies[i];
         if (b.type == STATIC) continue;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.rotation += b.angularVelocity * dt;
+        
+        // Sleep check
+        if (b.vx * b.vx + b.vy * b.vy < 0.2f && std::abs(b.angularVelocity) < 0.2f && 
+            b.forceX == 0 && b.forceY == 0 && b.torque == 0) {
+            b.sleepTime += dt;
+        } else {
+            b.sleepTime = 0.0f;
+            b.isAwake = 1;
+        }
+
+        if (b.sleepTime > 1.0f) {
+            b.isAwake = 0;
+            b.vx = b.vy = b.angularVelocity = 0;
+            continue;
+        }
+
+        b.vx += (world->gravityX + b.forceX * b.inverseMass) * dt;
+        b.vy += (world->gravityY + b.forceY * b.inverseMass) * dt;
+        b.angularVelocity += (b.torque * b.inverseInertia) * dt;
+        
+        // Damping for stability
+        b.vx *= 0.99f;
+        b.vy *= 0.99f;
+        b.angularVelocity *= 0.99f;
+
+        b.forceX = b.forceY = b.torque = 0;
     }
 
-    // Phase 6: Position correction (non-linear Gauss-Seidel)
-    const float slop = 0.005f;  // Smaller slop for tighter correction
-    const float baumgarte = 0.4f;  // More aggressive correction (was 0.2)
+    // Phase 3: Solve Velocity Constraints
+    init_joint_velocity_constraints(world, dt);
     
+    for (int iter = 0; iter < world->velocityIterations; ++iter) {
+        for (int i = 0; i < world->activeConstraints; ++i) {
+            ContactConstraint& c = world->constraints[i];
+            NativeBody& a = world->bodies[c.bodyA], &b = world->bodies[c.bodyB];
+            if (!a.isAwake && !b.isAwake) continue;
+
+            // Simple Wake-up
+            a.isAwake = b.isAwake = 1;
+            a.sleepTime = b.sleepTime = 0;
+
+            Vec2 normal = {c.normalX, c.normalY}, tangent = {-c.normalY, c.normalX};
+            for (int j = 0; j < c.pointCount; ++j) {
+                ContactConstraintPoint& cp = c.points[j];
+                Vec2 ra = {cp.anchorAx, cp.anchorAy}, rb = {cp.anchorBx, cp.anchorBy};
+                Vec2 dv = (Vec2{b.vx, b.vy} + cross(b.angularVelocity, rb)) - (Vec2{a.vx, a.vy} + cross(a.angularVelocity, ra));
+                
+                // Normal Impulse with Restitution Bias
+                float vn = dv.dot(normal);
+                float bias = c.softness.massScale * c.softness.biasRate * cp.baseSeparation;
+                if (c.restitution > 0) bias -= c.restitution * vn; // Add bounce
+
+                float lambda = -cp.normalMass * (c.softness.massScale * vn + bias) - c.softness.impulseScale * cp.normalImpulse;
+                float oldImpulse = cp.normalImpulse;
+                cp.normalImpulse = std::max(oldImpulse + lambda, 0.0f);
+                lambda = cp.normalImpulse - oldImpulse;
+
+                Vec2 P = normal * lambda;
+                if (a.type != STATIC) { a.vx -= P.x * a.inverseMass; a.vy -= P.y * a.inverseMass; a.angularVelocity -= ra.cross(P) * a.inverseInertia; }
+                if (b.type != STATIC) { b.vx += P.x * b.inverseMass; b.vy += P.y * b.inverseMass; b.angularVelocity += rb.cross(P) * b.inverseInertia; }
+
+                // Friction Impulse
+                dv = (Vec2{b.vx, b.vy} + cross(b.angularVelocity, rb)) - (Vec2{a.vx, a.vy} + cross(a.angularVelocity, ra));
+                float lambdaT = -cp.tangentMass * dv.dot(tangent);
+                float maxF = c.friction * cp.normalImpulse;
+                oldImpulse = cp.tangentImpulse;
+                cp.tangentImpulse = std::max(-maxF, std::min(oldImpulse + lambdaT, maxF));
+                lambdaT = cp.tangentImpulse - oldImpulse;
+
+                Vec2 Pt = tangent * lambdaT;
+                if (a.type != STATIC) { a.vx -= Pt.x * a.inverseMass; a.vy -= Pt.y * a.inverseMass; a.angularVelocity -= ra.cross(Pt) * a.inverseInertia; }
+                if (b.type != STATIC) { b.vx += Pt.x * b.inverseMass; b.vy += Pt.y * b.inverseMass; b.angularVelocity += rb.cross(Pt) * b.inverseInertia; }
+            }
+        }
+        solve_joint_velocity_constraints(world);
+    }
+
+    // Phase 4: Integrate Positions
+    for (int i = 0; i < world->activeCount; ++i) {
+        NativeBody& b = world->bodies[i];
+        if (b.type == STATIC || !b.isAwake) continue;
+        b.x += b.vx * dt; b.y += b.vy * dt; b.rotation += b.angularVelocity * dt;
+    }
+
+    // Phase 5: Position Correction (pseudo-impulse for rotation stability)
+    const float slop = 0.01f, baumgarte = 0.2f;
     for (int iter = 0; iter < world->positionIterations; ++iter) {
         for (int i = 0; i < world->activeConstraints; ++i) {
             ContactConstraint& c = world->constraints[i];
-            NativeBody& a = world->bodies[c.bodyA];
-            NativeBody& b = world->bodies[c.bodyB];
-            
-            // Re-evaluate collision for current positions
+            NativeBody& a = world->bodies[c.bodyA], &b = world->bodies[c.bodyB];
+            if (!a.isAwake && !b.isAwake) continue;
+
             CollisionManifold m = {{0,0}, 0, {{0,0}}, 0, false};
             if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_CIRCLE) m = detectCircleCircle(a, b);
             else if (a.shapeType == SHAPE_BOX && b.shapeType == SHAPE_BOX) m = detectBoxBox(a, b);
             else if (a.shapeType == SHAPE_CIRCLE) m = detectCircleBox(a, b);
-            else { m = detectCircleBox(b, a); } // Correct normal (A->B) returned directly
-            
+            else { m = detectCircleBox(b, a); }
+
             if (!m.collided) continue;
+            if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_BOX) m.normal = m.normal * -1.0f;
             
-            if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_BOX) {
-                m.normal = m.normal * -1.0f;
-            }
-            
-            // Apply position correction
-            float correction = std::max(m.penetration - slop, 0.0f) * baumgarte;
-            float totalInvMass = a.inverseMass + b.inverseMass;
-            if (totalInvMass > 0.0f) {
-                Vec2 impulse = m.normal * (correction / totalInvMass);
-                if (a.type == DYNAMIC) {
-                    a.x -= impulse.x * a.inverseMass;
-                    a.y -= impulse.y * a.inverseMass;
-                }
-                if (b.type == DYNAMIC) {
-                    b.x += impulse.x * b.inverseMass;
-                    b.y += impulse.y * b.inverseMass;
-                }
+            float C = std::max(m.penetration - slop, 0.0f) * baumgarte;
+            if (C <= 0) continue;
+
+            float impulsePerPoint = C / (float)m.contactCount;
+            for (int j = 0; j < m.contactCount; ++j) {
+                Vec2 ra = m.contacts[j] - Vec2{a.x, a.y}, rb = m.contacts[j] - Vec2{b.x, b.y};
+                float raN = ra.cross(m.normal), rbN = rb.cross(m.normal);
+                float k = a.inverseMass + b.inverseMass + raN * raN * a.inverseInertia + rbN * rbN * b.inverseInertia;
+                if (k <= 1e-6f) continue;
+                
+                float impulse = impulsePerPoint / k;
+                Vec2 P = m.normal * impulse;
+                if (a.type != STATIC) { a.x -= P.x * a.inverseMass; a.y -= P.y * a.inverseMass; a.rotation -= ra.cross(P) * a.inverseInertia; }
+                if (b.type != STATIC) { b.x += P.x * b.inverseMass; b.y += P.y * b.inverseMass; b.rotation += rb.cross(P) * b.inverseInertia; }
             }
         }
+        solve_joint_position_constraints(world);
     }
-    
-    // Phase 6.5: Solve joint position constraints
-    solve_joint_position_constraints(world);
 }
 
 // Removed get_physics_version from here
@@ -620,6 +515,13 @@ int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float
     b.collision_count = 0;
     b.categoryBits = categoryBits;
     b.maskBits = maskBits;
+    
+    // Broadphase Proxy
+    AABB aabb = calculate_body_aabb(b);
+    b.proxyId = tree_insert_leaf(world->tree, id, aabb);
+    
+    b.isAwake = 1;
+    b.islandId = -1;
 
     return id;
 }

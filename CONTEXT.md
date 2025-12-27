@@ -96,3 +96,9 @@
 - **Solver Iterations**: Use 4 Position and 4 Velocity iterations per SUB-STEP (Total 32/frame).
 - **Collision Shapes**: Prefer Circle-Circle collisions for high-speed or chaotic simulations (like Pachinko).
 - **Shared World**: All rigid bodies must share the same `FPhysicsSystem` instance from the engine context.
+
+## Known Issues & Roadmaps
+- **Joint System Instability**: 
+    - **Issue**: Distance and Revolute joints may exhibit "rubber-banding" or snap behaviors under high stress or incorrect initialization.
+    - **Status**: Pending optimization. Need to revisit the native solver's sub-stepping and warm-starting parameters to achieve perfect rigidity.
+    - **Ref**: `pendulum_demo.dart` and `joints_demo.dart`.
