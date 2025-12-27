@@ -1,7 +1,9 @@
+import 'dart:ffi';
 import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../math/transform.dart';
 import '../rendering/light.dart';
+import '../native/particles_ffi.dart';
 import 'tree.dart';
 import 'signal.dart';
 
@@ -14,6 +16,11 @@ class FNode {
   final List<FNode> children = [];
   bool visible = true;
   bool billboard = false;
+
+  // -- Native Scenegraph --
+  int _nativeNodeId = -1;
+  int get nativeNodeId => _nativeNodeId;
+  Pointer<NativeNode>? _nativeNodePtr;
 
   // -- Lifecycle --
   FSceneTree? _tree;
@@ -96,6 +103,17 @@ class FNode {
     enterTree();
     treeEntered.emit();
 
+    // Create Native Node
+    final nativeScene = gameTree.engine.nativeScene;
+    final parentNativeId = parent?.nativeNodeId ?? -1;
+    _nativeNodeId = FlashNativeParticles.createNativeNode!(nativeScene, parentNativeId);
+    if (_nativeNodeId != -1) {
+      _nativeNodePtr = Pointer<NativeNode>.fromAddress(
+        nativeScene.ref.nodes.address + _nativeNodeId * sizeOf<NativeNode>(),
+      );
+      _syncToNative();
+    }
+
     for (final child in children) {
       child.propagateEnterTree(gameTree);
     }
@@ -158,6 +176,7 @@ class FNode {
     if (_worldDirty) return;
     _worldDirty = true;
     _cachedWorldPosition = null;
+    _nativeNodePtr?.ref.dirty = 1;
     for (final child in children) {
       child.setWorldDirty();
     }
@@ -184,6 +203,7 @@ class FNode {
   void update(double dt) {
     if (!_canProcess()) return;
 
+    _syncToNative();
     process(dt);
 
     for (final child in List.of(children)) {
@@ -266,6 +286,13 @@ class FNode {
   }
 
   Matrix4 get worldMatrix {
+    if (_nativeNodePtr != null) {
+      final nm = _nativeNodePtr!.ref.worldMatrix;
+      _cachedWorldMatrix.storage.setAll(0, nm.toList());
+      _worldDirty = false; // Reset to allow future setWorldDirty() calls to sync to native
+      return _cachedWorldMatrix;
+    }
+
     if (_worldDirty || transform.isDirty) {
       if (parent == null || parent is! FNode) {
         _cachedWorldMatrix.setFrom(transform.matrix);
@@ -275,5 +302,20 @@ class FNode {
       _worldDirty = false;
     }
     return _cachedWorldMatrix;
+  }
+
+  void _syncToNative() {
+    if (_nativeNodePtr == null) return;
+    final n = _nativeNodePtr!.ref;
+    n.posX = transform.position.x;
+    n.posY = transform.position.y;
+    n.posZ = transform.position.z;
+    n.rotX = transform.rotation.x;
+    n.rotY = transform.rotation.y;
+    n.rotZ = transform.rotation.z;
+    n.scaleX = transform.scale.x;
+    n.scaleY = transform.scale.y;
+    n.scaleZ = transform.scale.z;
+    n.visible = visible ? 1 : 0;
   }
 }

@@ -60,9 +60,9 @@ class FPainter extends CustomPainter {
     }
   }
 
-  // Native buffers for 500k particles to save memory (Hexagons)
-  static final Pointer<Float> _verticesPtr = calloc<Float>(500000 * 18 * 2);
-  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(500000 * 18);
+  // Native buffers for 500k particles to save memory (Quads)
+  static final Pointer<Float> _verticesPtr = calloc<Float>(500000 * 6 * 2);
+  static final Pointer<Uint32> _colorsPtr = calloc<Uint32>(500000 * 6);
   static final Pointer<Float> _matrixPtr = calloc<Float>(16);
 
   void _renderParticles(Canvas canvas, Matrix4 cameraMatrix, FParticleEmitter emitter) {
@@ -85,8 +85,8 @@ class FPainter extends CustomPainter {
     if (renderedCount > 0) {
       final vertices = ui.Vertices.raw(
         ui.VertexMode.triangles,
-        _verticesPtr.asTypedList(renderedCount * 18 * 2),
-        colors: _colorsPtr.cast<Int32>().asTypedList(renderedCount * 18),
+        _verticesPtr.asTypedList(renderedCount * 6 * 2),
+        colors: _colorsPtr.cast<Int32>().asTypedList(renderedCount * 6),
       );
 
       canvas.drawVertices(vertices, BlendMode.srcOver, Paint());

@@ -65,8 +65,8 @@ void fill_chunk_pass1(ParticleEmitter* emitter, float* m, ThreadWork& work) {
 }
 
 void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, const ThreadWork& work, int globalOffset) {
-    int vPtr = globalOffset * 18 * 2;
-    int cPtr = globalOffset * 18;
+    int vPtr = globalOffset * 6 * 2; // 6 vertices per particle
+    int cPtr = globalOffset * 6;     // 6 colors per particle
 
     for (int idx : work.visibleIndices) {
         NativeParticle& p = emitter->particles[idx];
@@ -79,30 +79,23 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
         if (halfSize < 0.2f) halfSize = 0.2f;
         if (halfSize > 50.0f) halfSize = 50.0f;
         
-        // Hexagon constants (for rounder shapes)
-        // Cos/Sin for 0, 60, 120, 180, 240, 300 degrees
-        static const float hx[] = {1.0f, 0.5f, -0.5f, -1.0f, -0.5f, 0.5f};
-        static const float hy[] = {0.0f, 0.866f, 0.866f, 0.0f, -0.866f, -0.866f};
-
         uint32_t alpha = (uint32_t)(p.life * 255.0f);
         uint32_t col = (p.color & 0x00FFFFFF) | (alpha << 24);
 
-        for (int i = 0; i < 6; ++i) {
-            int next = (i + 1) % 6;
-            // Center
-            vertices[vPtr++] = screenX; 
-            vertices[vPtr++] = screenY;
-            // Point 1
-            vertices[vPtr++] = screenX + hx[i] * halfSize;
-            vertices[vPtr++] = screenY + hy[i] * halfSize;
-            // Point 2
-            vertices[vPtr++] = screenX + hx[next] * halfSize;
-            vertices[vPtr++] = screenY + hy[next] * halfSize;
+        // Quad Geometry (2 triangles: 0-1-2 and 0-2-3)
+        float qx[] = {-1.0f, 1.0f, 1.0f, -1.0f};
+        float qy[] = {-1.0f, -1.0f, 1.0f, 1.0f};
 
-            colors[cPtr++] = col;
-            colors[cPtr++] = col;
-            colors[cPtr++] = col;
-        }
+        // Vertices (6 vertices to form a quad via 2 triangles)
+        vertices[vPtr++] = screenX + qx[0] * halfSize; vertices[vPtr++] = screenY + qy[0] * halfSize;
+        vertices[vPtr++] = screenX + qx[1] * halfSize; vertices[vPtr++] = screenY + qy[1] * halfSize;
+        vertices[vPtr++] = screenX + qx[2] * halfSize; vertices[vPtr++] = screenY + qy[2] * halfSize;
+        
+        vertices[vPtr++] = screenX + qx[0] * halfSize; vertices[vPtr++] = screenY + qy[0] * halfSize;
+        vertices[vPtr++] = screenX + qx[2] * halfSize; vertices[vPtr++] = screenY + qy[2] * halfSize;
+        vertices[vPtr++] = screenX + qx[3] * halfSize; vertices[vPtr++] = screenY + qy[3] * halfSize;
+
+        for (int i = 0; i < 6; ++i) colors[cPtr++] = col;
     }
 }
 

@@ -30,6 +30,42 @@ final class NativeParticle extends Struct {
   external int color;
 }
 
+final class NativeTransform extends Struct {
+  @Float()
+  external double m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15;
+
+  List<double> toList() => [m0, m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13, m14, m15];
+}
+
+final class NativeNode extends Struct {
+  @Uint32()
+  external int id;
+  @Float()
+  external double posX, posY, posZ;
+  @Float()
+  external double rotX, rotY, rotZ;
+  @Float()
+  external double scaleX, scaleY, scaleZ;
+
+  external NativeTransform localMatrix;
+  external NativeTransform worldMatrix;
+
+  @Int32()
+  external int parentId;
+  @Int32()
+  external int visible;
+  @Int32()
+  external int dirty;
+}
+
+final class NativeScene extends Struct {
+  external Pointer<NativeNode> nodes;
+  @Int32()
+  external int maxNodes;
+  @Int32()
+  external int activeCount;
+}
+
 final class PhysicsWorld extends Struct {
   external Pointer<NativeBody> bodies;
   @Int32()
@@ -226,6 +262,12 @@ class FlashNativeParticles {
   static void Function(Pointer<PhysicsWorld>, int, double, double)? setBodyVelocity;
   static void Function(Pointer<PhysicsWorld>, int, Pointer<Float>, Pointer<Float>)? getBodyPosition;
 
+  // Scene/Node Functions
+  static Pointer<NativeScene> Function(int)? createNativeScene;
+  static void Function(Pointer<NativeScene>)? destroyNativeScene;
+  static int Function(Pointer<NativeScene>, int)? createNativeNode;
+  static void Function(Pointer<NativeScene>)? updateSceneTransforms;
+
   // RayCast
   static RayCastHit Function(Pointer<PhysicsWorld>, double, double, double, double)? rayCast;
 
@@ -304,6 +346,22 @@ class FlashNativeParticles {
           RayCastHit Function(Pointer<PhysicsWorld>, Float, Float, Float, Float),
           RayCastHit Function(Pointer<PhysicsWorld>, double, double, double, double)
         >('ray_cast');
+
+    // Scene & Node Lookups
+    createNativeScene = _lib!.lookupFunction<Pointer<NativeScene> Function(Int32), Pointer<NativeScene> Function(int)>(
+      'create_native_scene',
+    );
+    destroyNativeScene = _lib!.lookupFunction<Void Function(Pointer<NativeScene>), void Function(Pointer<NativeScene>)>(
+      'destroy_native_scene',
+    );
+    createNativeNode = _lib!
+        .lookupFunction<Int32 Function(Pointer<NativeScene>, Int32), int Function(Pointer<NativeScene>, int)>(
+          'create_native_node',
+        );
+    updateSceneTransforms = _lib!
+        .lookupFunction<Void Function(Pointer<NativeScene>), void Function(Pointer<NativeScene>)>(
+          'update_scene_transforms',
+        );
 
     print('Native Core Library loaded successfully');
   }

@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
@@ -15,13 +16,16 @@ import 'scene_manager.dart';
 import 'tween.dart';
 
 class FEngine extends ChangeNotifier {
-  final FSceneTree tree = FSceneTree();
+  late final FSceneTree tree;
   FNode get scene => tree.root;
 
   final FAudioSystem audio = FAudioSystem();
   final FInputSystem input = FInputSystem();
   final FSceneManager sceneManager = FSceneManager();
   final FTweenManager tweenManager = FTweenManager();
+
+  /// Native Transform Hierarchy
+  late final Pointer<NativeScene> nativeScene;
 
   /// Current viewport size in pixels
   v.Vector2 viewportSize = v.Vector2(0, 0);
@@ -50,8 +54,16 @@ class FEngine extends ChangeNotifier {
   double elapsed = 0.0;
 
   FEngine() {
-    // Ensure native libraries are loaded
+    // 1. Ensure native libraries are loaded
     init();
+
+    // 2. Initialize native scene graph (Max 10k nodes for now)
+    // This must happen BEFORE the tree/root node creation.
+    nativeScene = FlashNativeParticles.createNativeScene!(10000);
+
+    // 3. Initialize scene tree
+    tree = FSceneTree(this);
+
     _ticker = Ticker(_tick);
   }
 
@@ -91,10 +103,9 @@ class FEngine extends ChangeNotifier {
 
   @override
   void dispose() {
-    // physicsWorld is owned by the creator (e.g. FView widget or Game), not the Engine.
-    // Do not dispose it here to avoid double-free if the creator also disposes it.
     _ticker.dispose();
     audio.dispose();
+    FlashNativeParticles.destroyNativeScene!(nativeScene);
     super.dispose();
   }
 
@@ -122,6 +133,9 @@ class FEngine extends ChangeNotifier {
     physicsWorld?.update(dt);
     sceneManager.update(dt);
     tweenManager.update(dt);
+
+    // Update Native Transforms Hierarchy
+    FlashNativeParticles.updateSceneTransforms!(nativeScene);
 
     // Use first visible registered camera (O(1) instead of O(n) tree traversal)
     activeCamera = _activeCameras.firstWhere(

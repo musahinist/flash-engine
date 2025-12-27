@@ -1,10 +1,13 @@
 import 'node.dart';
+import '../systems/engine.dart';
 
 /// Manages the game loop, root node, and global state.
 /// This mirrors Godot's SceneTree.
 class FSceneTree {
   /// The absolute root of the scene tree.
   late final FNode root;
+
+  final FEngine engine;
 
   /// The currently active scene (usually a child of root).
   FNode? currentScene;
@@ -14,7 +17,7 @@ class FSceneTree {
   /// Global group management (Group Name -> Set of Nodes)
   final Map<String, Set<FNode>> _groups = {};
 
-  FSceneTree() {
+  FSceneTree(this.engine) {
     root = FNode(name: 'root');
     // Root is technically always "in the tree"
     root.processMode = ProcessMode.always;

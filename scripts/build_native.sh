@@ -23,6 +23,7 @@ clang++ -shared -fPIC \
     "$SOURCE_DIR/physics.cpp" \
     "$SOURCE_DIR/broadphase.cpp" \
     "$SOURCE_DIR/joints.cpp" \
+    "$SOURCE_DIR/nodes.cpp" \
     -o "$OUTPUT_DIR/libflash_core_sim.dylib"
 
 if [ $? -eq 0 ]; then

@@ -202,7 +202,7 @@ class FPhysics {
   static const double metersToPixels = 50.0;
   // FlashPainter uses Y-Up coordinate system (0,0 in center, +Y is Up).
   // So Gravity must be negative to pull things down.
-  static final v.Vector2 standardGravity = v.Vector2(0, -9.8 * 100);
+  static final v.Vector2 standardGravity = v.Vector2(0, -9.81 * 100);
 
   // Body Types
   static const int staticBody = 0;

@@ -376,10 +376,10 @@ void step_physics(PhysicsWorld* world, float dt) {
         b.vy += (world->gravityY + b.forceY * b.inverseMass) * dt;
         b.angularVelocity += (b.torque * b.inverseInertia) * dt;
         
-        // Damping for stability
-        b.vx *= 0.99f;
-        b.vy *= 0.99f;
-        b.angularVelocity *= 0.99f;
+        // Damping for stability (Reduced from 0.99 to 0.999 to allow gravity to be snappy)
+        b.vx *= 0.999f;
+        b.vy *= 0.999f;
+        b.angularVelocity *= 0.999f;
 
         b.forceX = b.forceY = b.torque = 0;
     }
@@ -528,21 +528,30 @@ int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float
 
 void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
-        world->bodies[bodyId].forceX += fx;
-        world->bodies[bodyId].forceY += fy;
+        NativeBody& b = world->bodies[bodyId];
+        b.forceX += fx;
+        b.forceY += fy;
+        b.isAwake = 1;
+        b.sleepTime = 0.0f;
     }
 }
 
 void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
-        world->bodies[bodyId].torque += torque;
+        NativeBody& b = world->bodies[bodyId];
+        b.torque += torque;
+        b.isAwake = 1;
+        b.sleepTime = 0.0f;
     }
 }
 
 void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
-        world->bodies[bodyId].vx = vx;
-        world->bodies[bodyId].vy = vy;
+        NativeBody& b = world->bodies[bodyId];
+        b.vx = vx;
+        b.vy = vy;
+        b.isAwake = 1;
+        b.sleepTime = 0.0f;
     }
 }
 

@@ -2,8 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flash/src/core/graph/node.dart';
 import 'package:flash/src/core/graph/tree.dart';
 import 'package:flash/src/core/graph/signal.dart';
+import 'package:flash/src/core/systems/engine.dart';
 
 void main() {
+  final engine = FEngine();
   group('FSignal', () {
     test('emit notifies listeners', () {
       final signal = FSignal<int>();
@@ -26,7 +28,7 @@ void main() {
 
   group('Groups', () {
     test('Nodes register/unregister with tree via groups', () {
-      final tree = FSceneTree();
+      final tree = FSceneTree(engine);
       final node = FNode(name: 'GroupNode');
 
       // Add to group BEFORE entering tree
@@ -45,7 +47,7 @@ void main() {
     });
 
     test('callGroup executes on all nodes', () {
-      final tree = FSceneTree();
+      final tree = FSceneTree(engine);
       final node1 = FNode(name: 'n1');
       final node2 = FNode(name: 'n2');
 
@@ -62,7 +64,7 @@ void main() {
     });
 
     test('Groups persist across tree re-parenting (enter/exit)', () {
-      final tree = FSceneTree();
+      final tree = FSceneTree(engine);
       final node = FNode(name: 'PersistentNode');
       node.addToGroup('persistent');
 
