@@ -149,9 +149,6 @@ class _FRigidBodyState extends FNodeWidgetState<FRigidBody, FPhysicsBody> {
       body.setVelocity(widget.initialVelocity!.x, widget.initialVelocity!.y);
     }
 
-    body.onCollision = widget.onCollision;
-    body.onUpdate = widget.onUpdate;
-
     if (widget.onCreated != null) {
       widget.onCreated!(body);
     }

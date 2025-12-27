@@ -104,6 +104,7 @@ class _FViewState extends State<FView> {
         SizedBox.expand(
           child: RepaintBoundary(
             child: CustomPaint(
+              isComplex: true,
               painter: FPainter(engine: engine, camera: engine.activeCamera, repaint: engine),
               child: widget.child,
             ),

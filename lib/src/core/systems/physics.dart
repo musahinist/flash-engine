@@ -4,12 +4,14 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../graph/node.dart';
+import '../graph/signal.dart';
 import '../native/particles_ffi.dart';
 import '../native/physics_joints_ffi.dart';
+import '../native/physics_ids.dart';
 
 class FPhysicsSystem {
   // Singleton instance of the native physics world
-  final Pointer<PhysicsWorld> world;
+  final WorldId world;
   final v.Vector2 gravity;
 
   // Static instance of Joints FFI
@@ -43,11 +45,12 @@ class FPhysicsSystem {
         _jointsFFI = PhysicsJointsFFI(lib);
       } catch (e) {
         // Failed to load joints library
+        debugPrint('Failed to load physics joints FFI: $e');
       }
     }
   }
 
-  static Pointer<PhysicsWorld> _createWorldSafe(int capacity) {
+  static WorldId _createWorldSafe(int capacity) {
     if (FlashNativeParticles.createPhysicsWorld == null) {
       throw UnsupportedError(
         'Native physics functions not initialized.\n'
@@ -84,6 +87,70 @@ class FPhysicsSystem {
   void setWarmStarting(bool enable) {
     // FlashNativeParticles.setWarmStarting!(world, enable ? 1 : 0);
   }
+
+  // --- ID-Based API Wrappers (Static for strict separation) ---
+
+  static BodyId createBody(
+    WorldId world,
+    int type,
+    int shapeType,
+    double x,
+    double y,
+    double width,
+    double height,
+    double rotation,
+  ) {
+    return FlashNativeParticles.createBody!(world, type, shapeType, x, y, width, height, rotation);
+  }
+
+  static void setBodyVelocity(WorldId world, BodyId bodyId, double vx, double vy) {
+    FlashNativeParticles.setBodyVelocity!(world, bodyId, vx, vy);
+  }
+
+  static void applyForce(WorldId world, BodyId bodyId, double fx, double fy) {
+    FlashNativeParticles.applyForce!(world, bodyId, fx, fy);
+  }
+
+  static void applyTorque(WorldId world, BodyId bodyId, double torque) {
+    FlashNativeParticles.applyTorque!(world, bodyId, torque);
+  }
+
+  static void getBodyPosition(WorldId world, BodyId bodyId, Pointer<Float> posX, Pointer<Float> posY) {
+    FlashNativeParticles.getBodyPosition!(world, bodyId, posX, posY);
+  }
+
+  // Helper to access body struct safely via ID
+  static Pointer<NativeBody> _getBodyPtr(WorldId world, BodyId bodyId) {
+    return world.ref.bodies + bodyId;
+  }
+
+  static void setRestitution(WorldId world, BodyId bodyId, double value) {
+    _getBodyPtr(world, bodyId).ref.restitution = value;
+  }
+
+  static double getRestitution(WorldId world, BodyId bodyId) {
+    return _getBodyPtr(world, bodyId).ref.restitution;
+  }
+
+  static void setFriction(WorldId world, BodyId bodyId, double value) {
+    _getBodyPtr(world, bodyId).ref.friction = value;
+  }
+
+  static double getFriction(WorldId world, BodyId bodyId) {
+    return _getBodyPtr(world, bodyId).ref.friction;
+  }
+
+  static void setBullet(WorldId world, BodyId bodyId, bool isBullet) {
+    _getBodyPtr(world, bodyId).ref.isBullet = isBullet ? 1 : 0;
+  }
+
+  static double getRotation(WorldId world, BodyId bodyId) {
+    return _getBodyPtr(world, bodyId).ref.rotation;
+  }
+
+  static int getCollisionCount(WorldId world, BodyId bodyId) {
+    return _getBodyPtr(world, bodyId).ref.collisionCount;
+  }
 }
 
 class FPhysics {
@@ -111,15 +178,17 @@ class FPhysicsBody extends FNode {
   Color color;
 
   // Internal body ID from native physics
-  final int bodyId;
+  final BodyId bodyId;
   final int shapeType; // Store the shape type for correct rendering
-  final Pointer<PhysicsWorld> _world;
+  final WorldId _world;
 
-  /// Callback when this body collides
-  void Function(FPhysicsBody)? onCollision;
+  // -- Signals --
 
-  /// Callback on every physics update.
-  void Function(FPhysicsBody)? onUpdate;
+  /// Emitted when this body collides
+  final FSignal<FPhysicsBody> collision = FSignal();
+
+  /// Emitted on every physics update
+  final FSignal<FPhysicsBody> physicsProcess = FSignal();
 
   // Temporary buffers to avoid allocation in sync
   static final Pointer<Float> _posX = calloc<Float>();
@@ -129,7 +198,7 @@ class FPhysicsBody extends FNode {
   bool debugDraw;
 
   FPhysicsBody({
-    required Pointer<PhysicsWorld> world,
+    required WorldId world,
     int type = 2, // DYNAMIC
     this.shapeType = FPhysics.circle,
     double x = 0,
@@ -142,24 +211,31 @@ class FPhysicsBody extends FNode {
     this.debugDraw = false,
     double restitution = 0.5, // Increased default bounciness
     double friction = 0.1, // Reduced default friction
+    void Function(FPhysicsBody)? onCollision, // Legacy support
+    void Function(FPhysicsBody)? onUpdate, // Legacy support
   }) : _world = world,
-       bodyId = FlashNativeParticles.createBody!(world, type, shapeType, x, y, width, height, rotation) {
+       bodyId = FPhysicsSystem.createBody(world, type, shapeType, x, y, width, height, rotation) {
     // Set initial material properties via FFI
     this.restitution = restitution;
     this.friction = friction;
+
+    // Connect legacy callbacks if provided
+    if (onCollision != null) collision.connect(onCollision);
+    if (onUpdate != null) physicsProcess.connect(onUpdate);
+
     _syncFromPhysics();
   }
 
   /// Get/Set Restitution (Bounciness) directly on native body
-  double get restitution => _world.ref.bodies[bodyId].restitution;
-  set restitution(double value) => _world.ref.bodies[bodyId].restitution = value;
+  double get restitution => FPhysicsSystem.getRestitution(_world, bodyId);
+  set restitution(double value) => FPhysicsSystem.setRestitution(_world, bodyId, value);
 
   /// Get/Set Friction directly on native body
-  double get friction => _world.ref.bodies[bodyId].friction;
-  set friction(double value) => _world.ref.bodies[bodyId].friction = value;
+  double get friction => FPhysicsSystem.getFriction(_world, bodyId);
+  set friction(double value) => FPhysicsSystem.setFriction(_world, bodyId, value);
 
   /// Get the native physics world pointer
-  Pointer<PhysicsWorld> get world => _world;
+  WorldId get world => _world;
 
   @override
   void draw(Canvas canvas) {
@@ -179,40 +255,42 @@ class FPhysicsBody extends FNode {
   void update(double dt) {
     super.update(dt);
     _syncFromPhysics();
-    onUpdate?.call(this);
+    physicsProcess.emit(this);
   }
 
   void setVelocity(double vx, double vy) {
-    FlashNativeParticles.setBodyVelocity!(_world, bodyId, vx, vy);
+    FPhysicsSystem.setBodyVelocity(_world, bodyId, vx, vy);
   }
 
   void applyForce(double fx, double fy) {
-    FlashNativeParticles.applyForce!(_world, bodyId, fx, fy);
+    FPhysicsSystem.applyForce(_world, bodyId, fx, fy);
   }
 
   void applyTorque(double torque) {
-    FlashNativeParticles.applyTorque!(_world, bodyId, torque);
+    FPhysicsSystem.applyTorque(_world, bodyId, torque);
   }
 
   /// Enable continuous collision detection for fast-moving bodies
   void setBullet(bool isBullet) {
-    // FIX: Replaced elementAt with pointer arithmetic + to fix deprecation warning
-    final bodyPtr = _world.ref.bodies + bodyId;
-    bodyPtr.ref.isBullet = isBullet ? 1 : 0;
+    FPhysicsSystem.setBullet(_world, bodyId, isBullet);
   }
 
   void _syncFromPhysics() {
-    FlashNativeParticles.getBodyPosition!(_world, bodyId, _posX, _posY);
+    FPhysicsSystem.getBodyPosition(_world, bodyId, _posX, _posY);
 
-    // FIX: Replaced elementAt with pointer arithmetic + to fix deprecation warning
-    final bodyPtr = _world.ref.bodies + bodyId;
     transform.position = v.Vector3(_posX.value, _posY.value, 0);
-    transform.rotation = v.Vector3(0, 0, bodyPtr.ref.rotation);
+    transform.rotation = v.Vector3(0, 0, FPhysicsSystem.getRotation(_world, bodyId));
 
     // Check for collisions (feedback from native core)
-    if (bodyPtr.ref.collisionCount > 0) {
-      onCollision?.call(this);
+    if (FPhysicsSystem.getCollisionCount(_world, bodyId) > 0) {
+      collision.emit(this);
     }
+  }
+
+  @override
+  Rect? get bounds {
+    // If shape is circle, we still return a square bounding box for culling.
+    return Rect.fromCenter(center: Offset.zero, width: width, height: height);
   }
 }
 

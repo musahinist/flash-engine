@@ -3,6 +3,7 @@ import 'package:vector_math/vector_math_64.dart';
 import '../math/transform.dart';
 import '../rendering/light.dart';
 import 'tree.dart';
+import 'signal.dart';
 
 enum ProcessMode { inherit, always, paused, disabled }
 
@@ -30,12 +31,41 @@ class FNode {
   Vector3? _cachedWorldPosition;
 
   /// AABB for Frustum Culling. If null, node is always drawn.
-  /// Subclasses should override this for performance.
   Rect? get bounds => null;
+
+  // -- Groups --
+  final Set<String> _groups = {};
+
+  // -- Signals --
+  /// Emitted when the node enters the SceneTree.
+  final FSignalVoid treeEntered = FSignalVoid();
+
+  /// Emitted when the node exits the SceneTree.
+  final FSignalVoid treeExited = FSignalVoid();
 
   FNode({this.name = 'FNode'}) {
     transform.onChanged = setWorldDirty;
   }
+
+  // -- Groups API --
+
+  void addToGroup(String group) {
+    if (_groups.add(group)) {
+      if (isInsideTree) {
+        _tree!.registerNodeToGroup(this, group);
+      }
+    }
+  }
+
+  void removeFromGroup(String group) {
+    if (_groups.remove(group)) {
+      if (isInsideTree) {
+        _tree!.unregisterNodeFromGroup(this, group);
+      }
+    }
+  }
+
+  bool isInGroup(String group) => _groups.contains(group);
 
   // -- Lifecycle Virtual Methods (Godot Style) --
 
@@ -58,38 +88,35 @@ class FNode {
     if (_tree != null) return; // Already in tree
     _tree = gameTree;
 
+    // Register groups with the new tree
+    for (final group in _groups) {
+      gameTree.registerNodeToGroup(this, group);
+    }
+
     enterTree();
+    treeEntered.emit();
 
     for (final child in children) {
       child.propagateEnterTree(gameTree);
     }
 
-    // Ready is called post-order (children first, then parent)
-    // BUT Godot calls _enter_tree pre-order and _ready post-order.
-    // For simplicity locally, separate pass or simple queue?
-    // In Godot: enter_tree (top-down), ready (bottom-up).
-
-    // We can do ready here if we want immediate synchronous,
-    // but better to let the tree orchestrate "ready" callback if possible,
-    // or just do it recursively here for now.
     propagateReady();
   }
 
   void propagateReady() {
-    // Children are already processed via propagateEnterTree recursion which calls ready()
-    // strictly speaking Godot does post-order ready.
-    // Our propagateEnterTree does: 1. set tree 2. enterTree 3. recurse children 4. ready
-    // So ready() is called after children are entered.
-
-    // logic is in propagateEnterTree, so this method might be redundant or just a hook.
-    // For now, keep it empty or remove loop.
     ready();
   }
 
   void propagateExitTree() {
     if (_tree == null) return;
 
+    // Unregister groups from the old tree
+    for (final group in _groups) {
+      _tree!.unregisterNodeFromGroup(this, group);
+    }
+
     exitTree();
+    treeExited.emit();
 
     for (final child in children) {
       child.propagateExitTree();
@@ -147,7 +174,7 @@ class FNode {
 
     process(dt);
 
-    for (final child in children) {
+    for (final child in List.of(children)) {
       child.update(dt);
     }
   }

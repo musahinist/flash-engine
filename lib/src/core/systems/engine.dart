@@ -137,23 +137,84 @@ class FEngine extends ChangeNotifier {
     renderNodes.clear();
     lights.clear();
     emitters.clear();
-    _collectNodes(scene);
+
+    if (activeCamera == null) {
+      _collectNodes(scene, null);
+      return;
+    }
+
+    final proj = activeCamera!.getProjectionMatrix(viewportSize.x, viewportSize.y);
+    final view = activeCamera!.getViewMatrix();
+    final vpMatrix = proj * view;
+
+    _collectNodes(scene, vpMatrix);
   }
 
-  void _collectNodes(FNode node) {
+  void _collectNodes(FNode node, v.Matrix4? vpMatrix) {
     if (node != scene) {
-      if (!node.visible) return; // Basic visibility culling at collection time
+      if (!node.visible) return;
 
-      if (node is FLightNode) {
-        lights.add(node);
-      } else if (node is FParticleEmitter) {
-        emitters.add(node);
-      } else {
-        renderNodes.add(node);
+      bool isVisible = true;
+      if (vpMatrix != null && node.bounds != null) {
+        isVisible = _isNodeVisible(node, vpMatrix);
+      }
+
+      if (isVisible) {
+        if (node is FLightNode) {
+          lights.add(node);
+        } else if (node is FParticleEmitter) {
+          emitters.add(node);
+        } else {
+          renderNodes.add(node);
+        }
       }
     }
+
+    // Always recurse into children (unless the node logic explicitly culls children too, which we don't do here)
+    // Note: If !node.visible, we returned early, so children are skipped (correct for visibility graph).
+    // But for culling, we must continue.
     for (final child in node.children) {
-      _collectNodes(child);
+      _collectNodes(child, vpMatrix);
     }
+  }
+
+  bool _isNodeVisible(FNode node, v.Matrix4 vpMatrix) {
+    final bounds = node.bounds!;
+    // MVP = VP * World
+    final mvp = vpMatrix * node.worldMatrix;
+
+    // Check 4 corners of the local bounds rect (at z=0)
+    final corners = [
+      v.Vector4(bounds.left, bounds.top, 0.0, 1.0),
+      v.Vector4(bounds.right, bounds.top, 0.0, 1.0),
+      v.Vector4(bounds.right, bounds.bottom, 0.0, 1.0),
+      v.Vector4(bounds.left, bounds.bottom, 0.0, 1.0),
+    ];
+
+    int outLeft = 0;
+    int outRight = 0;
+    int outTop = 0;
+    int outBottom = 0;
+    int outNear = 0;
+    int outFar = 0;
+
+    for (final p in corners) {
+      final res = mvp * p;
+      // Check NDC bounds [-w, w]
+      if (res.x < -res.w) outLeft++;
+      if (res.x > res.w) outRight++;
+      if (res.y < -res.w) outTop++;
+      if (res.y > res.w) outBottom++;
+      // Z range depends on library, typically -w to w for GL-like
+      if (res.z < -res.w) outNear++;
+      if (res.z > res.w) outFar++;
+    }
+
+    // If all corners are outside of one plane, the object is culled
+    if (outLeft == 4 || outRight == 4 || outTop == 4 || outBottom == 4 || outNear == 4 || outFar == 4) {
+      return false;
+    }
+
+    return true;
   }
 }

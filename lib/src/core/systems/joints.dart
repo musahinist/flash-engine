@@ -2,8 +2,8 @@ import 'dart:ffi';
 import 'dart:math' as math;
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
-import '../native/particles_ffi.dart';
 import '../native/physics_joints_ffi.dart';
+import '../native/physics_ids.dart';
 import 'physics.dart'; // Import physics system directly to ensure visibility
 
 /// Joint types matching C++ enum
@@ -18,16 +18,16 @@ class JointType {
 abstract class FJoint {
   final FPhysicsBody bodyA;
   final FPhysicsBody bodyB;
-  int? _jointId;
+  JointId? _jointId;
 
   FJoint({required this.bodyA, required this.bodyB});
 
   /// Create the joint in the physics world
-  void create(Pointer<PhysicsWorld> world);
+  void create(WorldId world);
 
   /// Destroy the joint
-  void destroy(Pointer world) {
-    if (_jointId != null && _jointId! >= 0) {
+  void destroy(WorldId world) {
+    if (_jointId != null && _jointId!.isValid) {
       final ffi = FPhysicsSystem.jointsFFI;
       if (ffi != null) {
         ffi.destroyJoint(world, _jointId!);
@@ -36,7 +36,7 @@ abstract class FJoint {
     }
   }
 
-  bool get isCreated => _jointId != null && _jointId! >= 0;
+  bool get isCreated => _jointId != null && _jointId!.isValid;
 }
 
 /// Distance joint - maintains a fixed or spring distance between two bodies
@@ -71,7 +71,7 @@ class FDistanceJoint extends FJoint {
   }
 
   @override
-  void create(Pointer<PhysicsWorld> world) {
+  void create(WorldId world) {
     if (isCreated) return;
 
     final ffi = FPhysicsSystem.jointsFFI;
@@ -96,7 +96,7 @@ class FDistanceJoint extends FJoint {
 
       _jointId = ffi.createJoint(world, def);
 
-      if (_jointId! >= 0) {
+      if (_jointId!.isValid) {
         print('✅ Distance joint created: ID=$_jointId, length=${length.toStringAsFixed(1)}');
       } else {
         print('❌ Failed to create distance joint');
@@ -130,7 +130,7 @@ class FRevoluteJoint extends FJoint {
   });
 
   @override
-  void create(Pointer<PhysicsWorld> world) {
+  void create(WorldId world) {
     if (isCreated) return;
 
     final ffi = FPhysicsSystem.jointsFFI;
@@ -185,7 +185,7 @@ class FPrismaticJoint extends FJoint {
   });
 
   @override
-  void create(Pointer<PhysicsWorld> world) {
+  void create(WorldId world) {
     if (isCreated) return;
 
     final ffi = FPhysicsSystem.jointsFFI;
@@ -231,7 +231,7 @@ class FWeldJoint extends FJoint {
   });
 
   @override
-  void create(Pointer<PhysicsWorld> world) {
+  void create(WorldId world) {
     if (isCreated) return;
 
     final ffi = FPhysicsSystem.jointsFFI;
