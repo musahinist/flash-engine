@@ -31,18 +31,6 @@ class _NativeSoftBodyDemoState extends State<NativeSoftBodyDemo> {
     super.initState();
     _physics = FPhysicsSystem(gravity: v.Vector2(0, -900));
 
-    // Create Physical Ground (Invisible)
-    FPhysicsBody(
-      world: _physics.world,
-      type: FPhysics.staticBody,
-      shapeType: FPhysics.box,
-      x: 0,
-      y: -400, // Moved down as requested
-      width: 2000,
-      height: 50,
-      rotation: 0,
-    );
-
     // Generate points once
     const int pointCount = 32;
     const double radius = 80.0;
@@ -122,16 +110,20 @@ class _NativeSoftBodyDemoState extends State<NativeSoftBodyDemo> {
                 return [
                   FNodes(
                     children: [
-                      _buildGroundGrid(),
-
-                      FBox(position: v.Vector3(0, -400, 0), width: 2000, height: 50, color: Colors.white10),
-
                       // Declarative Soft Body Widget
                       FSoftBodyWidget(
                         world: _physics.world,
                         initialPoints: _initialPoints,
                         pressure: pressure,
                         stiffness: stiffness,
+                      ),
+
+                      FStaticBody(
+                        position: v.Vector3(0, -500, 0),
+                        width: 2000,
+                        height: 20,
+                        color: Colors.grey[800]!,
+                        debugDraw: true,
                       ),
 
                       FLight(
@@ -148,20 +140,6 @@ class _NativeSoftBodyDemoState extends State<NativeSoftBodyDemo> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildGroundGrid() {
-    return FNodes(
-      children: List<Widget>.generate(21, (i) {
-        final x = (i - 10) * 100.0;
-        return FNodes(
-          children: [
-            FBox(position: v.Vector3(x, 0, -100), width: 1, height: 2000, color: Colors.cyan.withOpacity(0.1)),
-            FBox(position: v.Vector3(0, x, -100), width: 2000, height: 1, color: Colors.cyan.withOpacity(0.1)),
-          ],
-        );
-      }),
     );
   }
 
