@@ -97,6 +97,36 @@
 - **Collision Shapes**: Prefer Circle-Circle collisions for high-speed or chaotic simulations (like Pachinko).
 - **Shared World**: All rigid bodies must share the same `FPhysicsSystem` instance from the engine context.
 
+## FFI Best Practices (Dart-Native Boundary)
+1.  **Hide Pointers from Dart Devs**:
+    - Never expose `Pointer<Float>`, `calloc`, or `free` in public APIs.
+    - Create helper methods that handle memory internally and return Dart types.
+    - **Good**: `Offset getSoftBodyPointPos(world, id, index)` - returns clean `Offset`
+    - **Bad**: `void getSoftBodyPoint(world, id, index, Pointer<Float> outX, Pointer<Float> outY)`
+
+2.  **Double-Free Prevention**:
+    - **CRITICAL**: Always review `calloc.free()` calls. Duplicate frees cause `SIGABRT` crashes.
+    - Use try-finally or document ownership clearly.
+    - Pattern: Allocate → Use → Free (exactly once, in same scope if possible).
+
+3.  **Reusable Buffers**:
+    - For high-frequency operations (every frame), allocate once and reuse:
+      ```dart
+      static final Pointer<Float> _pointX = calloc<Float>(); // Allocated once
+      ```
+    - Don't allocate/free in hot loops - GC pressure and fragmentation.
+
+4.  **Symbol Lookup Safety**:
+    - Wrap new FFI lookups in try-catch during development:
+      ```dart
+      try {
+        setSoftBodyParams = _lib!.lookupFunction<...>('set_soft_body_params');
+      } catch (e) {
+        print('WARNING: Symbol not found: $e');
+      }
+      ```
+    - This prevents hard crashes when native library is outdated.
+
 ## Known Issues & Roadmaps
 - **Joint System Instability**: 
     - **Issue**: Distance and Revolute joints may exhibit "rubber-banding" or snap behaviors under high stress or incorrect initialization.
