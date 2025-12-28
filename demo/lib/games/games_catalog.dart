@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'cube/cube_game_screen.dart';
+import 'cube_quest/cube_quest_screen.dart';
 
 class GamesCatalog extends StatelessWidget {
   const GamesCatalog({super.key});
@@ -7,6 +8,13 @@ class GamesCatalog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<_GameData> games = [
+      _GameData(
+        title: 'CubeQuest',
+        description: 'Collect gems, dodge enemies, use power-ups!',
+        icon: Icons.sports_esports_rounded,
+        color: const Color(0xFF1A0A47),
+        builder: (_) => const CubeQuestScreen(),
+      ),
       _GameData(
         title: 'Cube Roller',
         description: 'Roll & jump across infinite isometric grid.',
