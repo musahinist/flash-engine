@@ -22,3 +22,6 @@ export 'graph/timer.dart';
 export 'grids/grids.dart';
 export 'projection/projection.dart';
 export 'rendering/grid_camera.dart';
+export 'animation/cube_roller.dart';
+export 'lighting/directional_light.dart';
+export 'procedural/procedural_generator.dart';
