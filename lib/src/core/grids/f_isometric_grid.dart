@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:vector_math/vector_math_64.dart' as v;
 import 'f_grid.dart';
 
 /// Orientation of the isometric grid.
@@ -147,5 +148,39 @@ class FIsometricGrid extends FGrid {
     }
 
     return inside;
+  }
+
+  /// Project a 3D point (where Z is height) to 2D screen offset on the grid.
+  /// Used for translating world coordinates including height/jump to screen space.
+  Offset project(v.Vector3 worldPos) {
+    // Basic isometric projection similar to gridToLocal but handles Z as height
+    // worldPos.x -> Grid X axis (not necessarily screen X)
+    // worldPos.z -> Grid Y axis (Depth)
+    // worldPos.y -> Height (Up is positive Y in 3D usually, but screen is Y down)
+
+    // Flash Engine usually uses Y as Up in 3D physics, but grid maps (x, y) to (row, col)
+    // Here we treat worldPos.x as Grid X, worldPos.z as Grid Y (Depth)
+    // And worldPos.y as 3D Height (Visual offset up)
+
+    // 1. Get base 2D position on the grid
+    final screenBase = _project2D(worldPos.x, worldPos.z);
+
+    // 2. Apply height (Y) - visual Y is up (negative screen Y)
+    // We assume height 1 unit = tileHeight units visually for coherence
+    return Offset(screenBase.dx, screenBase.dy - worldPos.y);
+  }
+
+  Offset _project2D(double x, double y) {
+    switch (orientation) {
+      case IsometricOrientation.diamond:
+        // x, y are continuous grid coordinates
+        final isoX = (x - y) * (cellWidth / 2);
+        final isoY = (x + y) * (tileHeight / 2);
+        return Offset(isoX, isoY);
+
+      case IsometricOrientation.staggered:
+        // continuous staggered is complex, approximated
+        return Offset(x * cellWidth, y * tileHeight);
+    }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'cube/cube_game_screen.dart';
 import 'cube_quest/cube_quest_screen.dart';
+import 'cube_runner/cube_runner_screen.dart';
 
 class GamesCatalog extends StatelessWidget {
   const GamesCatalog({super.key});
@@ -8,6 +9,13 @@ class GamesCatalog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<_GameData> games = [
+      _GameData(
+        title: 'CubeRunner',
+        description: 'Flash Engine powered! Tilemap, AI, Power-ups.',
+        icon: Icons.rocket_launch_rounded,
+        color: const Color(0xFF0a1a2a),
+        builder: (_) => const CubeRunnerScreen(),
+      ),
       _GameData(
         title: 'CubeQuest',
         description: 'Collect gems, dodge enemies, use power-ups!',

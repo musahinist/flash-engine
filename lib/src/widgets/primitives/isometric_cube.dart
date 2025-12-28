@@ -28,8 +28,17 @@ class FIsometricCubeWidget extends StatelessWidget {
   /// Light direction for shading
   final v.Vector3 lightDirection;
 
-  FIsometricCubeWidget({super.key, required this.size, required this.color, this.rotation, v.Vector3? lightDirection})
-    : lightDirection = lightDirection ?? v.Vector3(0.5, -1.0, -0.5);
+  /// Optional widgets to render on specific faces (front, back, left, right, top, bottom)
+  final Map<String, Widget>? faceChildren;
+
+  FIsometricCubeWidget({
+    super.key,
+    required this.size,
+    required this.color,
+    this.rotation,
+    v.Vector3? lightDirection,
+    this.faceChildren,
+  }) : lightDirection = lightDirection ?? v.Vector3(0.5, -1.0, -0.5);
 
   @override
   Widget build(BuildContext context) {
@@ -110,29 +119,40 @@ class FIsometricCubeWidget extends StatelessWidget {
     // Sort by Z-depth (back to front)
     faces.sort((a, b) => a.zDepth.compareTo(b.zDepth));
 
+    // Combine camera and object rotation for final render transform
+    final renderTransform = Matrix4.copy(cameraMatrix)..multiply(cubeRotation);
+
     // Build widget tree
     return Transform(
       alignment: Alignment.center,
-      transform: cubeRotation,
-      child: Stack(
-        children: faces.map((face) {
-          return Positioned.fill(
-            child: Center(
-              child: Transform(
-                transform: face.transform,
-                alignment: Alignment.center,
-                child: Container(
-                  width: size,
-                  height: size,
-                  decoration: BoxDecoration(
-                    color: face.displayColor,
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.1), width: 1),
+      transform: renderTransform,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: faces.map((face) {
+            return Positioned.fill(
+              child: Center(
+                child: Transform(
+                  transform: face.transform,
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      color: face.displayColor,
+                      border: Border.all(color: Colors.black.withValues(alpha: 0.1), width: 1),
+                    ),
+                    child: faceChildren != null && faceChildren!.containsKey(face.name)
+                        ? faceChildren![face.name]
+                        : null,
                   ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
