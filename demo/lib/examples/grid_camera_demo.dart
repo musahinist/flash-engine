@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
 /// Demo showcasing the new Grid and Camera systems.
 class GridCameraDemo extends StatefulWidget {
   const GridCameraDemo({super.key});
@@ -97,23 +101,47 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1a1a2e),
-      appBar: AppBar(title: const Text('Grid & Camera Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      body: Column(
-        children: [
-          // Grid type selector
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [_buildGridButton('Square', 0), const SizedBox(width: 16), _buildGridButton('Isometric', 1)],
+    return DemoPage(
+      title: 'Grid & Camera',
+      subtitle: 'FSquareGrid and FIsometricGrid, and what the camera does with them.',
+      controls: [
+        DemoPanel(
+          title: 'Grid',
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DemoButton(
+                  label: 'Square',
+                  selected: _gridType == 0,
+                  onPressed: () => setState(() => _gridType = 0),
+                ),
+                const SizedBox(width: 6),
+                DemoButton(
+                  label: 'Isometric',
+                  selected: _gridType == 1,
+                  onPressed: () => setState(() => _gridType = 1),
+                ),
+              ],
             ),
-          ),
-
-          // Grid viewport
-          Expanded(
-            child: LayoutBuilder(
+          ],
+        ),
+        DemoPanel(
+          title: _gridType == 0 ? 'Move' : 'Move (screen directions)',
+          children: [_gridType == 0 ? _buildSquareControls() : _buildIsometricControls()],
+        ),
+        DemoButton(
+          label: 'Shake the camera',
+          icon: Icons.vibration_rounded,
+          tint: DemoTheme.warning,
+          onPressed: () => _camera.shake(magnitude: 15, duration: 0.3),
+        ),
+      ],
+      readouts: [DemoStat(label: 'Cell', value: '$_playerX, $_playerY')],
+      hint: 'On the isometric grid the arrows are screen directions, not axes.',
+      scene: ColoredBox(
+        color: DemoTheme.background,
+        child: LayoutBuilder(
               builder: (context, constraints) {
                 final viewport = Size(constraints.maxWidth, constraints.maxHeight);
                 return GestureDetector(
@@ -133,16 +161,8 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
                     painter: _GridPainter(grid: _getGrid(), camera: _camera, playerX: _playerX, playerY: _playerY),
                   ),
                 );
-              },
-            ),
-          ),
-
-          // Controls - different layout for each grid type
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: _gridType == 0 ? _buildSquareControls() : _buildIsometricControls(),
-          ),
-        ],
+          },
+        ),
       ),
     );
   }
@@ -183,8 +203,6 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        ElevatedButton(onPressed: () => _camera.shake(magnitude: 15, duration: 0.3), child: const Text('Shake!')),
       ],
     );
   }
@@ -228,23 +246,10 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        ElevatedButton(onPressed: () => _camera.shake(magnitude: 15, duration: 0.3), child: const Text('Shake!')),
       ],
     );
   }
 
-  Widget _buildGridButton(String label, int type) {
-    final selected = _gridType == type;
-    return ElevatedButton(
-      onPressed: () => setState(() => _gridType = type),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: selected ? Colors.cyanAccent : Colors.grey[800],
-        foregroundColor: selected ? Colors.black : Colors.white,
-      ),
-      child: Text(label),
-    );
-  }
 }
 
 class _GridPainter extends CustomPainter {

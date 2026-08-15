@@ -2,6 +2,10 @@ import 'package:flash/flash.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
 class NativeParticleDemo extends StatefulWidget {
   const NativeParticleDemo({super.key});
 
@@ -41,9 +45,52 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
     // Current configuration based on selection
     final config = _showPresets ? _presets[_activePresetIdx] : _getStressConfig();
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: FScene(
+    return DemoPage(
+      title: 'Million Particles',
+      subtitle: 'The native vertex builder at full stretch.',
+      accent: DemoTheme.warning,
+      controlsWidth: 250,
+      controls: [
+        DemoButton(
+          label: 'Shape: ${_shapeNames[_currentShape]}',
+          icon: Icons.category_rounded,
+          tint: DemoTheme.warning,
+          selected: !_showPresets,
+          width: 226,
+          onPressed: _cycleShape,
+        ),
+        DemoButton(
+          label: _showPresets ? 'Preset: ${_presetNames[_activePresetIdx]}' : 'Switch to presets',
+          icon: Icons.auto_awesome_rounded,
+          tint: DemoTheme.accent,
+          selected: _showPresets,
+          width: 226,
+          onPressed: _cyclePreset,
+        ),
+      ],
+      readouts: [
+        Builder(
+          builder: (context) {
+            final engine = context.flash;
+            if (engine == null) return const SizedBox.shrink();
+            // The count changes every frame, so only this panel listens —
+            // rebuilding the scene to report on it would be self-defeating.
+            return ListenableBuilder(
+              listenable: engine,
+              builder: (context, _) {
+                final active = engine.emitters.isEmpty ? 0 : engine.emitters.first.activeCount;
+                return DemoStat(
+                  label: 'Active',
+                  value: _grouped(active),
+                  tint: _currentShape == 4 ? DemoTheme.warning : DemoTheme.accent,
+                );
+              },
+            );
+          },
+        ),
+      ],
+      hint: 'Triangle mode reaches 1,000,000; the other shapes cap at 500,000.',
+      scene: FScene(
         sceneBuilder: (ctx, elapsed) {
           // Slow zoom out animation (Starts at 400, ends at 1000 over 40 seconds)
           final zoomZ = 400.0 + (elapsed * 15.0).clamp(0, 600);
@@ -75,91 +122,6 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
               FParticles(key: ValueKey('stress_$_currentShape'), config: _getStressConfig()),
           ];
         },
-        overlay: [
-          // Header UI
-          Positioned(
-            top: 60,
-            left: 20,
-            child: Builder(
-              builder: (context) {
-                final engine = context.flash;
-                if (engine == null) return const SizedBox.shrink();
-
-                // Wrap in ListenableBuilder to update count every frame
-                return ListenableBuilder(
-                  listenable: engine,
-                  builder: (context, _) {
-                    final activeCount = engine.emitters.isEmpty ? 0 : engine.emitters.first.activeCount;
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'AKTİF: ${activeCount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}',
-                          style: TextStyle(
-                            color: _showPresets
-                                ? Colors.amberAccent
-                                : (_currentShape == 4 ? Colors.orangeAccent : Colors.cyanAccent),
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: () => _cycleShape(),
-                          child: _buildButton(
-                            'Stress Mod: ${_shapeNames[_currentShape]}',
-                            !_showPresets ? Colors.cyanAccent : Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () => _cyclePreset(),
-                          child: _buildButton(
-                            'Preset: ${_showPresets ? _presetNames[_activePresetIdx] : "Showcase"}',
-                            _showPresets ? Colors.amberAccent : Colors.white24,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-
-          // Bottom Info
-          const Positioned(
-            bottom: 40,
-            right: 20,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'FSCENE POWERED',
-                  style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 4),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Native Particle Demo',
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Text('Declarative Scene Management', style: TextStyle(color: Colors.cyanAccent, fontSize: 14)),
-              ],
-            ),
-          ),
-
-          // Back Button
-          Positioned(
-            bottom: 40,
-            left: 20,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white54),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -200,22 +162,9 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
     });
   }
 
-  Widget _buildButton(String label, Color color) {
-    return Container(
-      width: 180,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.05), blurRadius: 10, spreadRadius: 1)],
-      ),
-      child: Center(
-        child: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
+  /// Thousands separators, so a seven-digit readout stays legible.
+  static String _grouped(int value) => value.toString().replaceAllMapped(
+    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+    (match) => '${match[1]},',
+  );
 }
