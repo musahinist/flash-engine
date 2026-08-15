@@ -108,15 +108,15 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
         DemoPanel(
           title: 'Grid',
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 DemoButton(
                   label: 'Square',
                   selected: _gridType == 0,
                   onPressed: () => setState(() => _gridType = 0),
                 ),
-                const SizedBox(width: 6),
                 DemoButton(
                   label: 'Isometric',
                   selected: _gridType == 1,
@@ -127,7 +127,7 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
           ],
         ),
         DemoPanel(
-          title: _gridType == 0 ? 'Move' : 'Move (screen directions)',
+          title: 'Move',
           children: [_gridType == 0 ? _buildSquareControls() : _buildIsometricControls()],
         ),
         DemoButton(
@@ -138,7 +138,9 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
         ),
       ],
       readouts: [DemoStat(label: 'Cell', value: '$_playerX, $_playerY')],
-      hint: 'On the isometric grid the arrows are screen directions, not axes.',
+      hint: _gridType == 0
+          ? 'Arrows are the grid axes; a square grid lines up with the screen.'
+          : 'Arrows are screen directions — an isometric grid runs diagonally.',
       scene: ColoredBox(
         color: DemoTheme.background,
         child: LayoutBuilder(
@@ -167,88 +169,52 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
     );
   }
 
-  /// Standard D-pad for square grid
+  /// A square grid's axes line up with the screen, so the arrows are the axes.
   Widget _buildSquareControls() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        _padKey(Icons.keyboard_arrow_up_rounded, 0, -1),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_upward, color: Colors.white),
-              onPressed: () => _movePlayer(0, -1),
-            ),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => _movePlayer(-1, 0),
-            ),
-            const SizedBox(width: 48),
-            IconButton(
-              icon: const Icon(Icons.arrow_forward, color: Colors.white),
-              onPressed: () => _movePlayer(1, 0),
-            ),
-          ],
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_downward, color: Colors.white),
-              onPressed: () => _movePlayer(0, 1),
-            ),
+            _padKey(Icons.keyboard_arrow_left_rounded, -1, 0),
+            _padKey(Icons.keyboard_arrow_down_rounded, 0, 1),
+            _padKey(Icons.keyboard_arrow_right_rounded, 1, 0),
           ],
         ),
       ],
     );
   }
 
-  /// Diamond D-pad for isometric grid (visual directions match screen)
+  /// On an isometric grid the axes run diagonally on screen, so the pad is
+  /// rotated to match what the user sees rather than what the maths calls x.
   Widget _buildIsometricControls() {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Up-Left and Up-Right (visual top)
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.north_west, color: Colors.white),
-              onPressed: () => _movePlayer(-1, 0), // Visual NW = grid -X
-              tooltip: 'NW (-X)',
-            ),
-            const SizedBox(width: 24),
-            IconButton(
-              icon: const Icon(Icons.north_east, color: Colors.white),
-              onPressed: () => _movePlayer(0, -1), // Visual NE = grid -Y
-              tooltip: 'NE (-Y)',
-            ),
+            _padKey(Icons.north_west_rounded, -1, 0),
+            _padKey(Icons.north_east_rounded, 0, -1),
           ],
         ),
-        const SizedBox(height: 8),
-        // Down-Left and Down-Right (visual bottom)
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.south_west, color: Colors.white),
-              onPressed: () => _movePlayer(0, 1), // Visual SW = grid +Y
-              tooltip: 'SW (+Y)',
-            ),
-            const SizedBox(width: 24),
-            IconButton(
-              icon: const Icon(Icons.south_east, color: Colors.white),
-              onPressed: () => _movePlayer(1, 0), // Visual SE = grid +X
-              tooltip: 'SE (+X)',
-            ),
+            _padKey(Icons.south_west_rounded, 0, 1),
+            _padKey(Icons.south_east_rounded, 1, 0),
           ],
         ),
       ],
     );
   }
+
+  Widget _padKey(IconData icon, int dx, int dy) => Padding(
+    padding: const EdgeInsets.all(2),
+    child: DemoButton(label: '', icon: icon, onPressed: () => _movePlayer(dx, dy)),
+  );
 
 }
 

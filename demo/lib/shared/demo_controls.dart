@@ -185,7 +185,12 @@ class DemoSlider extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: DemoTheme.body),
+            // Flexible on both: a long label and a wide value together
+            // overflowed the panel, which is narrow by design.
+            Flexible(
+              child: Text(label, style: DemoTheme.body, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: DemoTheme.gap),
             Text(
               '${value.toStringAsFixed(fractionDigits)}$suffix',
               style: DemoTheme.readout.copyWith(fontSize: 13, color: tint),
@@ -251,9 +256,10 @@ class DemoLegend extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 5),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
+                  margin: const EdgeInsets.only(top: 4),
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
@@ -263,7 +269,9 @@ class DemoLegend extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: DemoTheme.gap),
-                Text(e.label, style: DemoTheme.body),
+                // Legend text is prose and routinely longer than the panel is
+                // wide, so it wraps rather than overflowing.
+                Flexible(child: Text(e.label, style: DemoTheme.body)),
               ],
             ),
           ),
