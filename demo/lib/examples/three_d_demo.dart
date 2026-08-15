@@ -1,8 +1,17 @@
-import 'package:flutter/material.dart';
-import 'package:flash/flash.dart';
-import 'package:vector_math/vector_math_64.dart' as v;
 import 'dart:math';
 
+import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
+
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+
+/// The primitives with real depth: [FCube], [FSphere], [FBox] and [FLabel].
+///
+/// FRONT and BACK sit either side of the origin, so the painter's-algorithm
+/// sort has something visible to get right. Slide the camera back and the
+/// perspective divide separates them further.
 class ThreeDDemo extends StatefulWidget {
   const ThreeDDemo({super.key});
 
@@ -10,68 +19,64 @@ class ThreeDDemo extends StatefulWidget {
   State<ThreeDDemo> createState() => _ThreeDDemoState();
 }
 
-class _ThreeDDemoState extends State<ThreeDDemo> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+class _ThreeDDemoState extends State<ThreeDDemo> {
+  double _distance = 800;
+  bool _spin = true;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(title: const Text('3D Primitives Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      extendBodyBehindAppBar: true,
-      body: FView(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final t = _controller.value * 2 * pi;
+    return DemoPage(
+      title: '3D Primitives',
+      subtitle: 'FCube, FSphere, FBox and FLabel, sorted back to front.',
+      controls: [
+        DemoPanel(
+          children: [
+            DemoSlider(
+              label: 'Camera distance',
+              value: _distance,
+              min: 350,
+              max: 2000,
+              fractionDigits: 0,
+              onChanged: (value) => setState(() => _distance = value),
+            ),
+          ],
+        ),
+        DemoToggle(label: 'Rotate', value: _spin, onChanged: (v) => setState(() => _spin = v)),
+      ],
+      hint: 'FRONT and BACK straddle the origin — that is the sort working.',
+      scene: FView(
+        // No AnimationController: the engine already has a clock, and FAnimated
+        // hands it over. One fewer thing with a lifecycle to get wrong.
+        child: FAnimated(
+          builder: (context, elapsed) {
+            final t = _spin ? elapsed : 0.0;
             return FNodes(
-              position: v.Vector3(0, 0, 0),
               children: [
-                // Rotating Cube 1
+                FCamera(position: v.Vector3(0, 0, _distance), fov: 60),
                 FCube(
                   size: 150,
                   color: Colors.cyanAccent,
                   position: v.Vector3(-200, 0, 0),
                   rotation: v.Vector3(t, t * 0.5, 0),
                 ),
-
-                // Rotating Cube 2 (Opposite direction)
                 FCube(
                   size: 100,
                   color: Colors.purpleAccent,
                   position: v.Vector3(200, 100, -100),
                   rotation: v.Vector3(-t * 0.7, t, t * 0.3),
                 ),
-
-                // Floating Sphere 1
                 FSphere(
                   radius: 60,
                   color: Colors.orangeAccent,
                   position: v.Vector3(0, 150 + sin(t) * 50, 50),
                   name: 'Ball1',
                 ),
-
-                // Floating Sphere 2
                 FSphere(
                   radius: 40,
                   color: Colors.pinkAccent,
                   position: v.Vector3(150 * cos(t), -200, 150 * sin(t)),
                   name: 'Ball2',
                 ),
-
-                // Ground Plane (using nodes)
                 FBox(
                   position: v.Vector3(0, -300, 0),
                   rotation: v.Vector3(pi / 2, 0, 0),
@@ -79,8 +84,6 @@ class _ThreeDDemoState extends State<ThreeDDemo> with SingleTickerProviderStateM
                   height: 1000,
                   color: Colors.white10,
                 ),
-
-                // Some depth reference labels
                 FLabel(
                   text: 'FRONT',
                   position: v.Vector3(0, 0, 200),

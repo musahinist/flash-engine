@@ -1,8 +1,18 @@
+import 'dart:math';
+
 import 'package:flash/flash.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
-import 'dart:math';
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// Positional audio: six sources around a moving listener.
+///
+/// [FAudioPlayer] with `is3D` attenuates and pans by the distance between the
+/// source's world position and the camera, so orbiting the camera is enough to
+/// sweep through them.
 class ThreeDAudioDemo extends StatefulWidget {
   const ThreeDAudioDemo({super.key});
 
@@ -11,119 +21,110 @@ class ThreeDAudioDemo extends StatefulWidget {
 }
 
 class _ThreeDAudioDemoState extends State<ThreeDAudioDemo> {
-  double _time = 0.0;
+  double _radius = 300;
+  double _speed = 1;
+  bool _playing = true;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('3D Audio Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      body: FView(
-        autoUpdate: true,
-        child: Builder(
-          builder: (context) {
-            final engineWidget = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
-            final engine = engineWidget?.engine;
+    // Built here rather than as a const list because Vector3 is not const.
+    final sources = <({v.Vector3 position, Color colour, String label})>[
+      (position: v.Vector3(0, 0, -200), colour: DemoTheme.danger, label: 'front'),
+      (position: v.Vector3(0, 0, 200), colour: DemoTheme.accent, label: 'back'),
+      (position: v.Vector3(-200, 0, 0), colour: DemoTheme.positive, label: 'left'),
+      (position: v.Vector3(200, 0, 0), colour: DemoTheme.warning, label: 'right'),
+      (position: v.Vector3(0, 200, 0), colour: DemoTheme.accentAlt, label: 'up'),
+      (position: v.Vector3(0, -200, 0), colour: const Color(0xFFFF9E64), label: 'down'),
+    ];
 
-            if (engine != null) {
-              engine.addUpdateListener((dt) {
-                _time += 1 / 60.0; // Assuming 60 FPS
-                setState(() {}); // Trigger rebuild to update camera
-              });
-            }
+    return DemoPage(
+      title: '3D Audio',
+      subtitle: 'Six looping sources; the camera is the listener.',
+      controls: [
+        DemoPanel(
+          children: [
+            DemoSlider(
+              label: 'Orbit radius',
+              value: _radius,
+              min: 80,
+              max: 700,
+              fractionDigits: 0,
+              onChanged: (value) => setState(() => _radius = value),
+            ),
+            DemoSlider(
+              label: 'Orbit speed',
+              value: _speed,
+              min: 0,
+              max: 3,
+              fractionDigits: 2,
+              suffix: 'x',
+              onChanged: (value) => setState(() => _speed = value),
+            ),
+          ],
+        ),
+        DemoToggle(
+          label: 'Playing',
+          value: _playing,
+          onChanged: (value) => setState(() => _playing = value),
+        ),
+        DemoPanel(
+          title: 'Sources',
+          children: [
+            DemoLegend(
+              entries: [for (final s in sources) (color: s.colour, label: s.label)],
+            ),
+          ],
+        ),
+      ],
+      hint: 'Wear headphones. Attenuation runs from 50 to 500 units.',
+      scene: FView(
+        child: FAnimated(
+          builder: (context, elapsed) {
+            // The camera is driven from the engine's own clock. This used to
+            // register an update listener inside build() that called setState,
+            // so every rebuild added another listener and each one triggered
+            // the next rebuild — the list grew without bound.
+            final t = elapsed * _speed;
 
-            // Camera moves in a circle around the origin
-            final cameraX = 300 * cos(_time);
-            final cameraZ = 300 * sin(_time);
-            final cameraY = 100 * sin(_time * 0.5); // Some up-down motion
-
-            return Stack(
+            return FNodes(
               children: [
-                FCamera(position: v.Vector3(cameraX, cameraY, cameraZ + 400), fov: 60),
+                FCamera(
+                  position: v.Vector3(
+                    cos(t) * _radius,
+                    sin(t * 0.5) * 100,
+                    sin(t) * _radius + 400,
+                  ),
+                  fov: 60,
+                ),
 
-                // Center marker
                 FSphere(position: v.Vector3(0, 0, 0), radius: 10, color: Colors.white),
 
-                // Audio sources at different positions
-                // Front
-                _buildAudioSource(v.Vector3(0, 0, -200), Colors.red, 'Front'),
-                // Back
-                _buildAudioSource(v.Vector3(0, 0, 200), Colors.blue, 'Back'),
-                // Left
-                _buildAudioSource(v.Vector3(-200, 0, 0), Colors.green, 'Left'),
-                // Right
-                _buildAudioSource(v.Vector3(200, 0, 0), Colors.yellow, 'Right'),
-                // Up
-                _buildAudioSource(v.Vector3(0, 200, 0), Colors.purple, 'Up'),
-                // Down
-                _buildAudioSource(v.Vector3(0, -200, 0), Colors.orange, 'Down'),
-
-                // UI overlay
-                Positioned(
-                  bottom: 20,
-                  left: 20,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '3D Audio Demo',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                for (final source in sources)
+                  FNodes(
+                    position: source.position,
+                    children: [
+                      FSphere(radius: 20, color: source.colour),
+                      FLabel(
+                        text: source.label,
+                        position: v.Vector3(0, 36, 0),
+                        style: TextStyle(color: source.colour, fontSize: 13),
+                      ),
+                      if (_playing)
+                        FAudioPlayer(
+                          assetPath: 'asset/demo.mp3',
+                          autoplay: true,
+                          loop: true,
+                          is3D: true,
+                          minDistance: 50,
+                          maxDistance: 500,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Camera orbiting center\nListen to spatial audio',
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Time: ${_time.toStringAsFixed(1)}s',
-                          style: const TextStyle(color: Colors.cyan, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-                ),
               ],
             );
           },
         ),
       ),
-    );
-  }
-
-  Widget _buildAudioSource(v.Vector3 position, Color color, String label) {
-    return Stack(
-      children: [
-        FSphere(position: position, radius: 20, color: color),
-        // Add audio player
-        Positioned.fill(
-          child: FAudioPlayer(
-            assetPath: 'asset/demo.mp3',
-            autoplay: true,
-            loop: true,
-            is3D: true,
-            volume: 1.0,
-            minDistance: 50.0,
-            maxDistance: 500.0,
-            position: position,
-          ),
-        ),
-        // Label
-        Positioned(
-          left: position.x + 30,
-          top: position.y + 30,
-          child: Text(
-            label,
-            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
     );
   }
 }
