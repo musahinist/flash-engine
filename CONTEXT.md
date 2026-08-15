@@ -2,8 +2,9 @@
 
 ## Core Philosophy
 1.  **Mobile First**: The engine is optimized for mobile performance (iOS/Android).
-    *   **Simulator Priority**: Functionality MUST work on iOS Simulator (`x86_64` / `arm64`). Native libraries must be compiled specifically for it (`libflash_core_sim.dylib`).
+    *   **Every platform builds from source**: `hook/build.dart` compiles `src/native/` for whatever target the app is built for. There is no per-platform dylib to maintain and no simulator special case — that was an artefact of the old absolute-path loader.
     *   **Performance**: Use FFI and native memory (Vectors) where possible to avoid GC pressure. This is a primary design constraint.
+    *   **No fixed-size arena allocations.** Buffers sized for a worst case (the old 1M-particle vertex buffer was 360 MB) must grow on demand instead.
 
 ## Master References & Design Philosophy
 1.  **Godot Engine (Primary Inspiration)**:
@@ -25,10 +26,12 @@
     *   `-Y` is DOWN (Bottom of screen).
     *   **Gravity**: MUST be Negative (e.g., `-9.8`). Explicitly override C++ defaults if necessary.
 2.  **Native Integration**:
-    *   **Struct Alignment**: Dart FFI structs (`particles_ffi.dart`) MUST exactly match C++ headers (`physics.h`).
-    *   **Library Loading**: Always handle `Platform.isIOS` specifically to load the simulator-compatible dylib.
+    *   **Struct Alignment**: Dart FFI structs (`flash_native_bindings.dart`) MUST exactly match the C++ headers, field for field. `test/native_abi_test.dart` enforces it — a mismatch corrupts reads silently rather than failing to compile.
+    *   **Library Loading**: There is none. Symbols resolve through `@DefaultAsset('package:flash/flash_core')`; never reintroduce a runtime path lookup.
 3.  **Input Transformation**:
     *   **Invert Y**: Mobile Input (Touch/Joystick) provides Screen Coordinates (Y-Down). Physics requires Y-Up. You MUST invert the Y-axis of any screen input before applying it to physics bodies (`dy = -input.y`).
+4.  **Grids live on the XZ plane**: a cell maps to world `(x, 0, z)` and `+Y` is height above the grid. This is what lets grids share the engine's Y-up convention rather than carrying a second, Y-down one. `FGrid.gridToWorld`/`worldToGrid` are the only place that mapping is written down — do not re-derive it.
+5.  **Isometric is a camera pose, not a projection type**: use `FCameraNode.isometric()`. The matrix was previously hand-written in four separate places.
 
 ## Development Workflow
 1.  **Hot Restart vs Cold Restart**: Native binary changes (`.dylib`) require a **Cold Restart** (Stop & Run). Hot Restart does not reload native code.
@@ -38,13 +41,19 @@
 
 ## Build Instructions
 1.  **Native Development**:
-  - **Manual Rebuilds**: C++ changes require a cold restart and manual compilation:
-    - **macOS Desktop**: `clang++ -dynamiclib -std=c++17 -o lib/src/core/native/bin/libflash_core.dylib src/native/physics.cpp src/native/joints.cpp src/native/broadphase.cpp src/native/particles.cpp`
-    - **iOS Simulator**: `clang++ -dynamiclib -std=c++17 -arch arm64 -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -o lib/src/core/native/bin/libflash_core_sim.dylib src/native/physics.cpp src/native/joints.cpp src/native/broadphase.cpp src/native/particles.cpp`
-  - **Troubleshooting**: If you see `linker command failed with exit code 1`, it means you forgot to include a `.cpp` file (e.g., `particles.cpp`) in the build command.
-  - **Reference Implementation**: All native physics implementation MUST explicitly follow the patterns and logic found in the generated `box2d-main` or `JoltPhysics-master` folders within the project root. Do not invent custom physics solvers; adapt established logic from these sources.
+  - **No manual compilation.** `hook/build.dart` builds `src/native/*.cpp` as part of `flutter run`/`flutter test`/`flutter build`, and registers the result as the code asset `package:flash/flash_core`. Adding a `.cpp` file means adding it to the `_sources` list in that hook.
+  - **Cold restart required**: C++ changes are picked up on a full restart, not hot restart.
+  - **Exported symbols must be marked `FLASH_API`** (see `src/native/flash_export.h`). Without it, Windows links a DLL with no usable entry points.
+  - **Reference Implementation**: All native physics implementation MUST explicitly follow the patterns and logic found in the generated `box2d-main` or `JoltPhysics-master` folders within `other_repo/`. Do not invent custom physics solvers; adapt established logic from these sources.
   - **Ownership**: The native C++ layer (`PhysicsWorld`, `bodies` vector) owns all memory. Dart has NO state logic, only UI representation.
-  - **FFI Boundary**: Dart only reads positions from `bodies` via `FlashNativeParticles.stepPhysics`. No logic in Dart. simulator requires `xcrun` and arch flags (advanced).
+  - **Allocator symmetry**: whatever allocates must match what frees — `calloc`/`free`, `new`/`delete`, `new[]`/`delete[]`. Mixing them is undefined behaviour and does not reliably crash.
+  - **ABI changes**: bump `FLASH_ABI_VERSION` in `physics.h` and `kFlashAbiVersion` in `flash_native.dart` together, and extend `src/native/abi_probe.cpp` if a struct gained a field. `test/native_abi_test.dart` is what stops a layout change corrupting reads silently.
+
+## Graceful Degradation (Vital)
+The engine is layered so a build without the native core still does something useful. Respect the tier when adding features:
+1.  **Tier 0 — scene graph, rendering, cameras, tweens, timers, input, audio.** Must never require native code. `FNode` falls back to pure-Dart transform maths.
+2.  **Tier 1 — particles.** Decorative: disable and warn once, never throw.
+3.  **Tier 2 — physics, joints, raycasting, soft bodies.** Cannot be faked. Throw `FlashNativeUnavailableError` at construction. A physics game that silently does not simulate is worse than one that refuses to start.
 
 ## Verification Protocol (Strict)
 1.  **Never Assume Success**: After editing code, YOU MUST verify it.
@@ -52,6 +61,10 @@
     *   Run `flutter analyze [file_path]` to catch syntax errors immediately.
     *   For native code, ensure compilation output is clean.
 3.  **Honesty**: If a fix fails, report the failure. Do not claim "fixed" without tool verification.
+
+## Node Lifecycle (Vital)
+1.  **Override `process(double dt)`, never `update(double dt)`.** `update` is the pump: it evaluates `ProcessMode`, syncs the transform to native, then calls `process` and recurses into children. Overriding `update` and working after `super.update(dt)` — which every subclass used to do — silently defeats `ProcessMode` and runs the parent's frame work *after* its children have already read it.
+2.  **Per-frame work in a widget belongs in `engine.addUpdateListener`**, paired with `removeUpdateListener` in `dispose`. Do not assign `engine.onUpdate`; that slot belongs to `FView`.
 
 ## Architecture & Memory (Vital)
 1.  **Memory Ownership**:
@@ -61,7 +74,7 @@
     *   **Native Truth**: The C++ simulation is the "Single Source of Truth" for position/rotation.
     *   **One-Way Sync**: `FPhysicsBody._syncFromPhysics()` pulls data from C++ to Dart every frame. Never overwrite C++ positions from Dart update loops unless explicitly teleporting.
 3.  **Performance Limits**:
-    *   **Particles**: Use Hardware Instancing (via `particles_ffi`) for counts > 10,000.
+    *   **Particles**: Use Hardware Instancing (via the native emitter) for counts > 10,000.
     *   **Rigid Bodies**: Keep active generic bodies under 500 for mobile 60fps.
 
 ## Layout & Coordinates (Vital)
@@ -87,8 +100,7 @@
 
 
 ### Native Development Rules
-- **Manual Recompilation**: Any change to C++ files (`src/native/*.cpp`) **REQUIRES** a manual recompilation of the dylib. Hot Restart will NOT pick up C++ changes.
-- **Build Command**: Use `clang++ -dynamiclib -std=c++17 -undefined dynamic_lookup -o lib/src/core/native/bin/libflash_core.dylib src/native/*.cpp` for macOS.
+- **No manual recompilation.** The build hook handles it; see "Build Instructions" above. Cold restart is still required for C++ changes.
 
 ### Physics Stability Rules
 - **Sub-stepping**: Run the physics solver at least 8 times per frame (`substeps = 8`) to ensure rock-solid floors.
@@ -128,7 +140,10 @@
     - This prevents hard crashes when native library is outdated.
 
 ## Known Issues & Roadmaps
-- **Joint System Instability**: 
+- **Joint System Instability**:
     - **Issue**: Distance and Revolute joints may exhibit "rubber-banding" or snap behaviors under high stress or incorrect initialization.
     - **Status**: Pending optimization. Need to revisit the native solver's sub-stepping and warm-starting parameters to achieve perfect rigidity.
     - **Ref**: `pendulum_demo.dart` and `joints_demo.dart`.
+- **No deprecation policy**: the package is pre-release with no external consumers, so removed API is removed outright and `demo/` is migrated in the same commit. Do not add `@Deprecated` shims.
+- **Windows and Linux are unverified**: the build hook targets them and `FLASH_API` is in place, but neither has been compiled on real hardware.
+- **`cube` and `cube_quest` do not use the engine**: both are pure Flutter despite the catalog billing them as "Built with Flash Engine".

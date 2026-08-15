@@ -1,221 +1,155 @@
-# Flash Engine 🎮
+# Flash Engine
 
-A lightweight 2.5D game engine for Flutter with declarative widgets, physics simulation, and spatial audio.
+A declarative, node-based 2.5D game engine for Flutter, with a native C++ core for physics and particles.
 
-## ✨ Features
+Godot's node model, expressed as Flutter widgets. You describe a scene; the engine owns the frame loop, the transform hierarchy, the render order and the simulation.
 
-- 🎨 **Declarative Widget API** - Build games using Flutter's familiar widget pattern
-- ⚙️ **Physics Engine** - Built-in Forge2D integration with `FlashRigidBody` and `FlashStaticBody`
-- 🎵 **3D Spatial Audio** - Positional audio with distance attenuation and panning
-- 💡 **Real-time Lighting** - Dynamic lighting system with multiple light sources
-- 📦 **Scene Graph** - Hierarchical node-based architecture
-- 🎯 **Godot-inspired** - Familiar node system for game developers
-- 🚀 **Performance Optimized** - Efficient rendering and physics updates
+> **Status: pre-release (0.0.1).** The API is not stable and there is no deprecation policy yet — things get renamed or removed outright between commits.
 
-## 🎮 Widgets
+## Requirements
 
-### Primitives
-- `FlashBox` - 2D rectangle with lighting
-- `FlashSphere` - Shaded 3D sphere with texture support
-- `FlashCube` - 3D cube primitive
-- `FlashCircle` - 2D circle
-- `FlashTriangle` - 2D triangle
+- Flutter ≥ 3.35, Dart ≥ 3.10
+- Android, iOS, macOS, Windows, Linux. **Not web** — the engine depends on `dart:ffi`.
 
-### Physics
-- `FlashRigidBody` - Dynamic physics body
-- `FlashStaticBody` - Static/immovable body
-- `FlashArea` - Trigger zones for collision detection
+The native core is compiled from source by a Dart build hook when your app builds. There is nothing to install, and no prebuilt binaries are shipped.
 
-### Audio
-- `FlashAudioPlayer` - 3D spatial audio source
-- `FlashAudioController` - Programmatic audio control
-
-### Scene
-- `FlashCameraWidget` - Camera/viewport control
-- `FlashLightWidget` - Point light source
-- `FlashNodes` - Multi-child layout
-- `FlashLabel` - Text rendering
-- `FlashSprite` - Image rendering
-
-## 🚀 Getting Started
-
-### Installation
-
-Add to your `pubspec.yaml`:
+## Getting started
 
 ```yaml
 dependencies:
   flash:
-    path: ../flash  # or publish to pub.dev
+    path: ../flash
 ```
 
-### Basic Example
+A scene is a widget:
 
 ```dart
 import 'package:flash/flash.dart';
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyGame extends StatelessWidget {
+  const MyGame({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Flash(
-          child: FlashBox(
-            position: Vector3(0, 0, 0),
-            width: 100,
-            height: 100,
-            color: Colors.blue,
-          ),
-        ),
+    return Scaffold(
+      body: FScene(
+        scene: [
+          FCamera(position: v.Vector3(0, 0, 500), fov: 60),
+          FLight(position: v.Vector3(100, 100, 200), intensity: 1.5),
+          FBox(position: v.Vector3(0, 0, 0), width: 100, height: 100, color: Colors.blue),
+        ],
       ),
     );
   }
 }
 ```
 
-## 📚 Examples
-
-### Physics Simulation
+`FScene` wraps `FView`, which owns the `FEngine`. Use `sceneBuilder` instead of `scene` when the contents change every frame:
 
 ```dart
-Flash(
-  physicsWorld: FlashPhysicsWorld(gravity: -50.0),
-  child: Stack(
-    children: [
-      // Static floor
-      FlashRigidBody(
-        bodyDef: BodyDef()..type = BodyType.static,
-        fixtures: [FixtureDef(PolygonShape()..setAsBoxXY(200, 10))],
-        child: FlashBox(width: 400, height: 20, color: Colors.grey),
-      ),
-      // Falling box
-      FlashRigidBody(
-        position: Vector3(0, 100, 0),
-        fixtures: [FixtureDef(PolygonShape()..setAsBoxXY(10, 10))..density = 1.0],
-        child: FlashBox(width: 20, height: 20, color: Colors.red),
-      ),
-    ],
-  ),
-)
-```
-
-### 3D Audio
-
-```dart
-FlashAudioPlayer(
-  assetPath: 'asset/sound.mp3',
-  is3D: true,
-  minDistance: 50,
-  maxDistance: 1000,
-  autoplay: true,
-)
-```
-
-### Dynamic Lighting
-
-```dart
-Stack(
-  children: [
-    FlashLightWidget(
-      position: Vector3(0, 0, 500),
-      color: Colors.white,
-      intensity: 1.0,
-    ),
-    FlashSphere(
-      radius: 80,
-      color: Colors.blue,
-      position: Vector3(0, 0, 0),
+FScene(
+  sceneBuilder: (context, elapsed) => [
+    FCamera(position: v.Vector3(0, 0, 500)),
+    FBox(
+      position: v.Vector3(math.cos(elapsed) * 200, 0, 0),
+      width: 50,
+      height: 50,
+      color: Colors.orange,
     ),
   ],
 )
 ```
 
-## 🏗️ Architecture
+## Coordinates
 
-```
-┌─────────────────────────────┐
-│     Flutter Widgets         │
-│  (FlashBox, FlashSphere...) │
-└──────────┬──────────────────┘
-           │
-┌──────────▼──────────────────┐
-│    FlashNodeWidget          │
-│   (Widget → Node Bridge)    │
-└──────────┬──────────────────┘
-           │
-┌──────────▼──────────────────┐
-│      FlashNode              │
-│   (Scene Graph Node)        │
-└──────────┬──────────────────┘
-           │
-┌──────────▼──────────────────┐
-│     FlashEngine             │
-│  • Scene Update Loop        │
-│  • Physics Integration      │
-│  • Audio System             │
-│  • Camera Management        │
-└─────────────────────────────┘
-```
+Two conventions matter, and they are not Flutter's:
 
-## 🎯 Core Concepts
+- **Origin is the centre of the viewport**, not the top-left.
+- **+Y is up.** Gravity is therefore negative, and screen input must have its Y inverted before being applied to physics.
 
-### Scene Graph
-All visual elements inherit from `FlashNode` and form a hierarchical tree. Transformations propagate down the tree.
+Grids are the exception worth knowing: they lie on the **XZ plane**, so a cell maps to `(x, 0, z)` and `+Y` is height above the grid.
 
-### Physics Bodies
-`FlashRigidBody` defaults to **dynamic** (moves with physics).  
-`FlashStaticBody` is immovable (floors, walls).
+## What's in the box
 
-### Audio System
-- **2D Audio**: Simple playback
-- **3D Audio**: Position-based with distance attenuation
+### Primitives
+`FBox` · `FSphere` · `FCube` · `FCircle` · `FTriangle` · `FIsometricCubeWidget`
 
-### Rendering Loop
-Engine runs at 60 FPS, updating physics and scene graph automatically.
+### Physics
+`FRigidBody` · `FStaticBody` · `FArea` · `FDistanceJoint` · `FRevoluteJoint` · `FPrismaticJoint` · `FWeldJoint` · `FSoftBodyWidget`
 
-## 🔧 Performance Tips
+Backed by a C++ solver adapted from Box2D: sub-stepped, warm-started, with an AABB broadphase.
 
-1. **Use `FlashNodes`** for multiple children instead of nested `Stack`
-2. **Cache default camera** - Already optimized in engine
-3. **Limit physics bodies** - Complex shapes are expensive
-4. **Use `autoplay: false`** for on-demand audio
-
-## 📁 Project Structure
-
-```
-lib/
-├── src/
-│   ├── core/           # Core engine systems
-│   │   ├── graph/      # Scene graph (FlashNode, FlashScene)
-│   │   ├── rendering/  # Camera, lighting, painter
-│   │   └── systems/    # Engine, physics, audio
-│   └── widgets/        # Declarative widgets
-│       ├── primitives/ # FlashBox, FlashSphere...
-│       ├── physics/    # FlashRigidBody...
-│       ├── audio/      # FlashAudioPlayer
-│       └── ui/         # FlashLabel, FlashSprite
-demo/                   # Example games/demos
+```dart
+FScene(
+  physicsWorld: FPhysicsSystem(gravity: v.Vector2(0, -980)),
+  scene: [
+    FStaticBody.square(position: v.Vector3(0, -200, 0), size: 800, color: Colors.grey),
+    FRigidBody.circle(position: v.Vector3(0, 200, 0), radius: 20, color: Colors.red),
+  ],
+)
 ```
 
-## 🤝 Contributing
+### Grids and tilemaps
+`FGridView` · `FCell` · `FTileMap` · `FSquareGrid` · `FIsometricGrid` · `FGridAgent`
 
-Contributions welcome! This is an experimental engine for learning and prototyping.
+```dart
+FGridView(
+  grid: const FIsometricGrid(cellWidth: 64),
+  children: [
+    FTileMap(tilePainter: paintTile),
+    FCell(x: playerX, y: playerY, child: FCube(size: 40, color: Colors.cyan)),
+  ],
+)
+```
 
-## 📄 License
+A tilemap draws every visible cell in a single node, so a large or infinite map costs one entry in the render list rather than one per cell.
 
-MIT License - See LICENSE file
+### Cameras
+`FCamera` — perspective or orthographic, with follow, dead zone, bounds and screen shake. `FCameraNode.isometric()` and `FCameraNode.topDown()` are presets; isometric is a camera *pose*, not a separate projection mode.
 
-## 🙏 Credits
+### Lighting
+`FLight` with `FLightType.point`, `.directional` or `.ambient`. A directional light is aimed by its own rotation.
 
-- **Physics**: [Forge2D](https://pub.dev/packages/forge2d)
-- **Audio**: [flutter_soloud](https://pub.dev/packages/flutter_soloud)
-- **Inspiration**: Godot Engine
+### Particles
+`FParticles` with ~20 presets (`fire`, `smoke`, `explosion`, `rain`, `confetti`…). Simulated and vertex-built in C++, drawn in one `drawVertices` call.
 
----
+### Also
+Scene graph (`FNode`, signals, groups, `ProcessMode`) · tweens and easing · timers · input (keyboard, pointer, gestures) · 3D positional audio · raycasting · procedural generation · scene transitions · HUD widgets.
 
-Built with ❤️ using Flutter and Dart
+## Running the examples
+
+```bash
+cd demo
+flutter run
+```
+
+26 examples and 3 games. Every code block above is lifted from something in there.
+
+## Degradation
+
+The engine is layered so a build without the native core still does something useful:
+
+| Tier | Covers | Without the native core |
+|---|---|---|
+| 0 | Scene graph, rendering, cameras, tweens, timers, input, audio | Works — transforms fall back to pure Dart |
+| 1 | Particles | Emitters disable themselves and warn once |
+| 2 | Physics, joints, raycasting, soft bodies | Throws `FlashNativeUnavailableError` at construction |
+
+Tier 2 fails loudly on purpose: a physics game that silently does not simulate is worse than one that refuses to start.
+
+## Working on the engine
+
+```bash
+flutter analyze
+flutter test
+```
+
+C++ lives in `src/native/` and is built by `hook/build.dart`. Changing it requires a **cold restart** — hot restart does not reload native code.
+
+`test/native_abi_test.dart` is the one to watch: the Dart bindings mirror the C++ structs field by field, and a layout change on one side only corrupts reads silently instead of failing to compile.
+
+## License
+
+MIT

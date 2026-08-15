@@ -106,9 +106,18 @@ class FPhysicsSystem {
     native.applyTorque(world, bodyId, torque);
   }
 
-  static void getBodyPosition(WorldId world, BodyId bodyId, Pointer<Float> posX, Pointer<Float> posY) {
-    native.getBodyPosition(world, bodyId, posX, posY);
+  /// Position of a body, in world units.
+  ///
+  /// The pointer-out-param version of this was public API, which the project's
+  /// own FFI rules forbid; raw pointers stay on the native side of the fence.
+  static Offset getBodyPosition(WorldId world, BodyId bodyId) {
+    native.getBodyPosition(world, bodyId, _scratchX, _scratchY);
+    return Offset(_scratchX.value, _scratchY.value);
   }
+
+  // Reused across calls: allocating per frame would churn native memory.
+  static final Pointer<Float> _scratchX = calloc<Float>();
+  static final Pointer<Float> _scratchY = calloc<Float>();
 
   // Helper to access body struct safely via ID
   static Pointer<NativeBody> _getBodyPtr(WorldId world, BodyId bodyId) {
@@ -168,19 +177,20 @@ class FPhysicsSystem {
 
   // --- Soft Body API ---
 
-  static int createSoftBody(
-    WorldId world,
-    int pointCount,
-    Pointer<Float> initialX,
-    Pointer<Float> initialY,
-    double pressure,
-    double stiffness,
-  ) {
-    return native.createSoftBody(world, pointCount, initialX, initialY, pressure, stiffness);
-  }
-
-  static void getSoftBodyPoint(WorldId world, int sbId, int pointIdx, Pointer<Float> outX, Pointer<Float> outY) {
-    native.getSoftBodyPoint(world, sbId, pointIdx, outX, outY);
+  /// Creates a soft body from a ring of points.
+  static int createSoftBody(WorldId world, List<Offset> points, {double pressure = 1.0, double stiffness = 0.5}) {
+    final xs = calloc<Float>(points.length);
+    final ys = calloc<Float>(points.length);
+    try {
+      for (var i = 0; i < points.length; i++) {
+        xs[i] = points[i].dx;
+        ys[i] = points[i].dy;
+      }
+      return native.createSoftBody(world, points.length, xs, ys, pressure, stiffness);
+    } finally {
+      calloc.free(xs);
+      calloc.free(ys);
+    }
   }
 
   static void setSoftBodyPoint(WorldId world, int sbId, int pointIdx, double x, double y) {
@@ -255,10 +265,6 @@ class FPhysicsBody extends FNode {
 
   /// Whether the native solver reported contacts for this body last frame.
   bool get isColliding => _wasColliding;
-
-  // Temporary buffers to avoid allocation in sync
-  static final Pointer<Float> _posX = calloc<Float>();
-  static final Pointer<Float> _posY = calloc<Float>();
 
   // Mutable debug flag
   bool debugDraw;
@@ -354,14 +360,14 @@ class FPhysicsBody extends FNode {
   }
 
   void _syncFromPhysics() {
-    FPhysicsSystem.getBodyPosition(_world, bodyId, _posX, _posY);
+    final pos = FPhysicsSystem.getBodyPosition(_world, bodyId);
     final rot = FPhysicsSystem.getRotation(_world, bodyId);
 
-    if (_posX.value.isNaN || _posY.value.isNaN || rot.isNaN) {
+    if (pos.dx.isNaN || pos.dy.isNaN || rot.isNaN) {
       return;
     }
 
-    transform.position = v.Vector3(_posX.value, _posY.value, 0);
+    transform.position = v.Vector3(pos.dx, pos.dy, 0);
     transform.rotation = v.Vector3(0, 0, rot);
 
     // Contact feedback from the native core. It reports a count, not the
@@ -390,10 +396,6 @@ class FSoftBody extends FNode {
   final int pointCount;
   final List<Offset> points;
 
-  // Temp buffers for syncing
-  static final Pointer<Float> _pointX = calloc<Float>();
-  static final Pointer<Float> _pointY = calloc<Float>();
-
   FSoftBody({
     required this.world,
     required List<Offset> initialPoints,
@@ -405,20 +407,7 @@ class FSoftBody extends FNode {
        id = _createNative(world, initialPoints, pressure, stiffness);
 
   static int _createNative(WorldId world, List<Offset> initialPoints, double pressure, double stiffness) {
-    final count = initialPoints.length;
-    final ptrX = calloc<Float>(count);
-    final ptrY = calloc<Float>(count);
-
-    for (int i = 0; i < count; i++) {
-      ptrX[i] = initialPoints[i].dx;
-      ptrY[i] = initialPoints[i].dy;
-    }
-
-    final id = FPhysicsSystem.createSoftBody(world, count, ptrX, ptrY, pressure, stiffness);
-
-    calloc.free(ptrX);
-    calloc.free(ptrY);
-    return id;
+    return FPhysicsSystem.createSoftBody(world, initialPoints, pressure: pressure, stiffness: stiffness);
   }
 
   void setParams(double pressure, double stiffness) {
@@ -432,8 +421,7 @@ class FSoftBody extends FNode {
 
   void _syncFromNative() {
     for (int i = 0; i < pointCount; i++) {
-      FPhysicsSystem.getSoftBodyPoint(world, id, i, _pointX, _pointY);
-      points[i] = Offset(_pointX.value, _pointY.value);
+      points[i] = FPhysicsSystem.getSoftBodyPointPos(world, id, i);
     }
   }
 
