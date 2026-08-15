@@ -1,0 +1,11 @@
+# The demo app is for developing the engine, not for consumers — it more than
+# doubles the archive and pulls in five platform scaffolds.
+demo/
+
+# Local copies of reference engines (Godot / Box2D / Jolt / Flame).
+other_repo/
+
+# Internal working notes.
+CONTEXT.md
+
+build/
