@@ -1,24 +1,64 @@
 import 'dart:math' as math;
 
+import '../graph/node.dart';
+import '../grids/f_grid.dart';
+
 /// Abstract base for grid-based AI agents.
 ///
-/// Grid agents move on discrete tile positions and update
-/// based on player position and time.
-abstract class FGridAgent {
+/// Agents move on discrete tile positions, driven by the engine's frame loop
+/// like any other node.
+///
+/// They used to be plain objects with `update(int playerX, int playerY, int
+/// currentTimeMs)`, which meant the caller had to feed them a wall-clock
+/// timestamp every frame — CubeRunner used `DateTime.now()`. That ignored
+/// [FSceneTree.paused] and any slow-motion entirely. Cooldowns are now in
+/// seconds and accumulate from the same `dt` everything else uses.
+abstract class FGridAgent extends FNode {
   int x;
   int y;
 
-  /// Movement cooldown in milliseconds
-  final int moveCooldownMs;
-  int _lastMoveTime = 0;
+  /// Seconds between moves.
+  final double moveCooldown;
+  double _cooldownTimer = 0;
 
-  FGridAgent({required this.x, required this.y, this.moveCooldownMs = 500});
+  /// The node this agent chases, flees or reacts to. Its world position is
+  /// converted to grid coordinates via [grid] when set.
+  FNode? target;
 
-  /// Update agent (call each frame)
-  void update(int playerX, int playerY, int currentTimeMs) {
-    if (currentTimeMs - _lastMoveTime < moveCooldownMs) return;
-    _lastMoveTime = currentTimeMs;
-    move(playerX, playerY);
+  /// Grid the agent walks on. Needed to turn [target]'s world position into
+  /// cell coordinates.
+  FGrid? grid;
+
+  int _targetX = 0;
+  int _targetY = 0;
+
+  FGridAgent({required this.x, required this.y, this.moveCooldown = 0.5, super.name = 'GridAgent'});
+
+  /// Sets the cell the agent should react to, for callers without a scene
+  /// graph to point [target] at.
+  void setTargetCell(int cellX, int cellY) {
+    _targetX = cellX;
+    _targetY = cellY;
+  }
+
+  /// Whether the agent may step onto a cell. Override to respect walls; the
+  /// default lets an agent walk anywhere.
+  bool canEnter(int cellX, int cellY) => true;
+
+  @override
+  void process(double dt) {
+    final t = target;
+    final g = grid;
+    if (t != null && g != null) {
+      final cell = g.worldToGrid(t.worldPosition);
+      _targetX = cell.x;
+      _targetY = cell.y;
+    }
+
+    _cooldownTimer -= dt;
+    if (_cooldownTimer > 0) return;
+    _cooldownTimer += moveCooldown;
+    move(_targetX, _targetY);
   }
 
   /// Override to implement movement logic
@@ -29,6 +69,13 @@ abstract class FGridAgent {
 
   /// Unique key for this agent position
   String get key => '$x,$y';
+
+  /// Moves to a cell if [canEnter] allows it.
+  void tryMoveTo(int cellX, int cellY) {
+    if (!canEnter(cellX, cellY)) return;
+    x = cellX;
+    y = cellY;
+  }
 }
 
 /// Patrol agent - follows a fixed path
@@ -37,7 +84,7 @@ class FPatrolAgent extends FGridAgent {
   int _pathIndex = 0;
   bool _forward = true;
 
-  FPatrolAgent({required super.x, required super.y, required this.path, super.moveCooldownMs = 800});
+  FPatrolAgent({required super.x, required super.y, required this.path, super.moveCooldown = 0.8});
 
   @override
   void move(int playerX, int playerY) {
@@ -90,7 +137,7 @@ class FChaserAgent extends FGridAgent {
   /// Detection range (Manhattan distance)
   final int detectionRange;
 
-  FChaserAgent({required super.x, required super.y, this.detectionRange = 5, super.moveCooldownMs = 600});
+  FChaserAgent({required super.x, required super.y, this.detectionRange = 5, super.moveCooldown = 0.6});
 
   @override
   void move(int playerX, int playerY) {
@@ -118,7 +165,7 @@ class FWandererAgent extends FGridAgent {
   final int _spawnX;
   final int _spawnY;
 
-  FWandererAgent({required super.x, required super.y, this.wanderRadius = 5, int? seed, super.moveCooldownMs = 1000})
+  FWandererAgent({required super.x, required super.y, this.wanderRadius = 5, int? seed, super.moveCooldown = 1.0})
     : _spawnX = x,
       _spawnY = y,
       _random = math.Random(seed);
@@ -158,7 +205,7 @@ class FJumperAgent extends FGridAgent {
   final int jumpDistance;
   final math.Random _random;
 
-  FJumperAgent({required super.x, required super.y, this.jumpDistance = 2, int? seed, super.moveCooldownMs = 1200})
+  FJumperAgent({required super.x, required super.y, this.jumpDistance = 2, int? seed, super.moveCooldown = 1.2})
     : _random = math.Random(seed);
 
   @override
@@ -186,7 +233,7 @@ class FJumperAgent extends FGridAgent {
 class FFleeAgent extends FGridAgent {
   final int fleeRange;
 
-  FFleeAgent({required super.x, required super.y, this.fleeRange = 4, super.moveCooldownMs = 400});
+  FFleeAgent({required super.x, required super.y, this.fleeRange = 4, super.moveCooldown = 0.4});
 
   @override
   void move(int playerX, int playerY) {

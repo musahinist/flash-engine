@@ -1,10 +1,25 @@
 import 'dart:ui';
 
+import 'package:vector_math/vector_math_64.dart';
+
 /// Abstract base class for all grid systems in Flash Engine.
 ///
 /// A grid provides coordinate transformation between grid coordinates (integers)
 /// and world/local coordinates (doubles). Different grid types (Square, Isometric, Hex)
 /// implement their own transformation logic.
+///
+/// ## Which plane a grid lives on
+///
+/// Grids lie on the **XZ plane**, not XY: a cell maps to world `(x, 0, z)` and
+/// `+Y` is height above the grid. That is what lets the grid coexist with the
+/// rest of the engine, which is Y-up (see `FPhysics.standardGravity`, and the
+/// Y flip baked into `FPainter`'s viewport matrix).
+///
+/// The 2D helpers below ([gridToLocal], [localToGrid], [getCellCenter]) work in
+/// a flat lattice space where `dx` is world **X** and `dy` is world **Z**. Use
+/// [gridToWorld] / [worldToGrid] / [cellCenterWorld] to cross into the scene
+/// graph — they are the only place that mapping is written down, so it cannot
+/// drift the way the hand-rolled copies in the games did.
 abstract class FGrid {
   /// Width of each cell in world units
   final double cellWidth;
@@ -27,6 +42,23 @@ abstract class FGrid {
     final topLeft = gridToLocal(x, y);
     return Offset(topLeft.dx + cellWidth / 2, topLeft.dy + cellHeight / 2);
   }
+
+  // --- Scene-graph bridge (XZ plane, Y-up) ---
+
+  /// World position of a cell's top-left corner, at [height] above the grid.
+  Vector3 gridToWorld(int x, int y, {double height = 0}) {
+    final local = gridToLocal(x, y);
+    return Vector3(local.dx, height, local.dy);
+  }
+
+  /// World position of a cell's centre, at [height] above the grid.
+  Vector3 cellCenterWorld(int x, int y, {double height = 0}) {
+    final centre = getCellCenter(x, y);
+    return Vector3(centre.dx, height, centre.dy);
+  }
+
+  /// The cell containing [world]. The Y (height) component is ignored.
+  ({int x, int y}) worldToGrid(Vector3 world) => localToGrid(world.x, world.z);
 
   /// Get neighboring cells for a given cell.
   /// The number and arrangement of neighbors depends on the grid type.

@@ -14,6 +14,9 @@ class FPainter extends CustomPainter {
 
   FPainter({required this.engine, required this.camera, super.repaint});
 
+  /// Reused so a camera-less scene does not allocate one per frame.
+  static FCameraNode? _fallbackCamera;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width == 0 || size.height == 0) return;
@@ -21,16 +24,9 @@ class FPainter extends CustomPainter {
     // Clip content to viewport bounds to prevent bleeding during transitions
     canvas.clipRect(Offset.zero & size);
 
-    // Viewport Matrix: Map NDC [-1, 1] to Screen [0, width], [0, height]
-    final viewportMatrix = Matrix4.identity()
-      ..setTranslationRaw(size.width / 2, size.height / 2, 0.0)
-      ..scaleByVector3(Vector3(size.width / 2, -size.height / 2, 1.0));
-
-    // Use active camera or fallback
-    final activeCam = camera ?? FCameraNode(name: 'PainterFallback');
-    final projectionMatrix = activeCam.getProjectionMatrix(size.width, size.height);
-    final viewMatrix = activeCam.getViewMatrix();
-    final cameraMatrix = viewportMatrix * projectionMatrix * viewMatrix;
+    // One projection path: the camera owns viewport · projection · view.
+    final activeCam = camera ?? (_fallbackCamera ??= FCameraNode(name: 'PainterFallback'));
+    final cameraMatrix = activeCam.getScreenMatrix(Vector2(size.width, size.height));
 
     final flatList = engine.renderNodes;
     final lights = engine.lights;

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
@@ -14,8 +16,9 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
   // Grid selection
   int _gridType = 0; // 0: Square, 1: Isometric
 
-  // Camera
-  late FGridCamera _camera;
+  // Camera: an orthographic FCameraNode looking down at the XZ plane. There
+  // is no separate 2D grid camera any more.
+  late FCameraNode _camera;
 
   // Player position (grid coordinates)
   int _playerX = 0;
@@ -27,7 +30,9 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _camera = FGridCamera(zoom: 1.0, followMode: CameraFollowMode.smooth, lerpSpeed: 0.08);
+    _camera = FCameraNode.topDown(orthographicSize: 300)
+      ..followMode = CameraFollowMode.smooth
+      ..followSmoothing = 0.12;
 
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 16))..addListener(_update);
 
@@ -35,13 +40,35 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
   }
 
   void _update() {
-    // Update camera target to player position
+    // Follow normally reads a target node; this demo has no scene graph, so it
+    // drives the camera position directly through the same smoothing rule.
     final grid = _getGrid();
-    final playerWorld = grid.getCellCenter(_playerX, _playerY);
-    _camera.target = v.Vector2(playerWorld.dx, playerWorld.dy);
-
-    _camera.update(0.016);
+    final playerWorld = grid.cellCenterWorld(_playerX, _playerY);
+    const dt = 0.016;
+    final t = 1 - math.exp(-dt / _camera.followSmoothing);
+    final pos = _camera.transform.position;
+    pos.x += (playerWorld.x - pos.x) * t;
+    pos.z += (playerWorld.z - pos.z) * t;
+    _camera.transform.syncExternalMutations();
+    _camera.process(dt);
     setState(() {});
+  }
+
+  /// Screen pixel -> point on the grid plane (Y = 0).
+  ///
+  /// Replaces FGridCamera.screenToWorld: inverts the camera's own screen
+  /// matrix rather than maintaining a second, parallel transform.
+  Offset _screenToGridPlane(Offset screen, Size viewport) {
+    final size = v.Vector2(viewport.width, viewport.height);
+    final inverse = Matrix4.copy(_camera.getScreenMatrix(size))..invert();
+    final near = inverse.perspectiveTransform(v.Vector3(screen.dx, screen.dy, 0));
+    final far = inverse.perspectiveTransform(v.Vector3(screen.dx, screen.dy, 1));
+
+    // Intersect the ray with the Y = 0 plane the grid lies on.
+    final dy = far.y - near.y;
+    final t = dy.abs() < 1e-9 ? 0.0 : -near.y / dy;
+    final hit = near + (far - near) * t;
+    return Offset(hit.x, hit.z);
   }
 
   FGrid _getGrid() {
@@ -92,9 +119,9 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
                 return GestureDetector(
                   onTapUp: (details) {
                     // Convert tap to grid coordinates
-                    final worldPos = _camera.screenToWorld(details.localPosition, viewport);
+                    final worldPos = _screenToGridPlane(details.localPosition, viewport);
                     final grid = _getGrid();
-                    final gridCoord = grid.localToGrid(worldPos.x, worldPos.y);
+                    final gridCoord = grid.localToGrid(worldPos.dx, worldPos.dy);
 
                     setState(() {
                       _playerX = gridCoord.x;
@@ -222,7 +249,7 @@ class _GridCameraDemoState extends State<GridCameraDemo> with SingleTickerProvid
 
 class _GridPainter extends CustomPainter {
   final FGrid grid;
-  final FGridCamera camera;
+  final FCameraNode camera;
   final int playerX;
   final int playerY;
 
@@ -244,7 +271,15 @@ class _GridPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     // Get visible cells
-    final visibleRect = camera.getVisibleRect(size);
+    final viewport = v.Vector2(size.width, size.height);
+    final visibleRect = camera.getVisibleWorldRect(viewport);
+
+    /// Grid lattice point -> screen pixel. The grid's `dy` is world Z.
+    Offset toScreen(Offset lattice) {
+      final p = camera.worldToScreen(v.Vector3(lattice.dx, 0, lattice.dy), viewport);
+      return Offset(p.x, p.y);
+    }
+
     final topLeft = grid.localToGrid(visibleRect.left, visibleRect.top);
     final bottomRight = grid.localToGrid(visibleRect.right, visibleRect.bottom);
 
@@ -252,7 +287,7 @@ class _GridPainter extends CustomPainter {
     for (int y = topLeft.y - 2; y <= bottomRight.y + 2; y++) {
       for (int x = topLeft.x - 2; x <= bottomRight.x + 2; x++) {
         final worldPos = grid.getCellCenter(x, y);
-        final screenPos = camera.worldToScreen(v.Vector2(worldPos.dx, worldPos.dy), size);
+        final screenPos = toScreen(worldPos);
 
         // Draw cell
         if (grid is FIsometricGrid) {
@@ -260,18 +295,18 @@ class _GridPainter extends CustomPainter {
           final polygon = isoGrid.getCellPolygon(x, y);
           final path = Path();
 
-          final first = camera.worldToScreen(v.Vector2(polygon[0].dx, polygon[0].dy), size);
+          final first = toScreen(polygon[0]);
           path.moveTo(first.dx, first.dy);
 
           for (int i = 1; i < polygon.length; i++) {
-            final p = camera.worldToScreen(v.Vector2(polygon[i].dx, polygon[i].dy), size);
+            final p = toScreen(polygon[i]);
             path.lineTo(p.dx, p.dy);
           }
           path.close();
           canvas.drawPath(path, gridPaint);
         } else {
           // Square grid
-          final cellSize = grid.cellWidth * camera.zoom;
+          final cellSize = grid.cellWidth * (size.height / 2) / camera.orthographicSize;
           canvas.drawRect(Rect.fromCenter(center: screenPos, width: cellSize, height: cellSize), gridPaint);
         }
 
@@ -284,7 +319,7 @@ class _GridPainter extends CustomPainter {
 
     // Draw player
     final playerWorld = grid.getCellCenter(playerX, playerY);
-    final playerScreen = camera.worldToScreen(v.Vector2(playerWorld.dx, playerWorld.dy), size);
+    final playerScreen = toScreen(playerWorld);
     canvas.drawCircle(playerScreen, 20, playerPaint);
 
     // Draw coordinates text

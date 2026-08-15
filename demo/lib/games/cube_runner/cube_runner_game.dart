@@ -20,7 +20,11 @@ class CubeRunnerGame extends ChangeNotifier {
   // Grid and Camera Systems
   static const double gridSize = 60.0;
   final FIsometricGrid isoGrid = const FIsometricGrid(cellWidth: gridSize);
-  late final FGridCamera camera;
+  late final FCameraNode camera;
+
+  /// Stand-in node the camera follows. CubeRunner has no scene graph of its
+  /// own, so this carries the player's world position for the camera.
+  final FNode _cameraTarget = FNode(name: 'CameraTarget');
 
   // Grid Agents (Enemies)
   final List<FGridAgent> enemies = [];
@@ -43,11 +47,10 @@ class CubeRunnerGame extends ChangeNotifier {
   // Stored viewport for camera
   Size _viewport = const Size(800, 600);
 
-  // CubeQuest Projection Matrix (True Isometric)
-  // Rotate X: -35.264 degrees, Rotate Y: -45 degrees
-  static final _isoMatrix = Matrix4.identity()
-    ..rotateX(-math.atan(1.0 / math.sqrt(2.0)))
-    ..rotateY(-math.pi / 4.0);
+  // The isometric matrix used to be hand-written here (and in three other
+  // places). It is now the camera's pose: FCameraNode.isometric() is an
+  // orthographic camera yawed 45 degrees and pitched atan(1/sqrt2), which is
+  // the same transform expressed once, in the place that owns projection.
 
   CubeRunnerGame() {
     tilemap = FProceduralTilemap(
@@ -64,13 +67,35 @@ class CubeRunnerGame extends ChangeNotifier {
     collectibles = FCollectibleSystem();
     powerUps = FPowerUpSystem();
 
-    // Initialize FGridCamera
-    // Use high lerp speed to keep background grid and objects in sync
-    camera = FGridCamera(zoom: 1.0, followMode: CameraFollowMode.smooth, lerpSpeed: 5.0);
+    camera = FCameraNode.isometric(orthographicSize: 320)
+      ..followMode = CameraFollowMode.smooth
+      // Seconds, not a per-frame fraction: the old value of 5.0 overshot the
+      // target five times over on every frame.
+      ..followSmoothing = 0.08;
 
     gameTimer.addListener(notifyListeners);
     _setupPowerUps();
     reset();
+  }
+
+  /// Points the camera at a world position, keeping its isometric offset.
+  void _moveCameraTo(v.Vector3 world, {bool instant = false}) {
+    _cameraTarget.transform.position.setFrom(world);
+    _cameraTarget.transform.syncExternalMutations();
+    camera.followTarget = _cameraTarget;
+    if (instant) {
+      camera.transform.position.setFrom(world + camera.followOffset);
+      camera.transform.syncExternalMutations();
+    }
+  }
+
+  /// Canvas transform for the background grid painter, which draws a flat
+  /// lattice and needs the same isometric pose the camera uses.
+  Matrix4 _backgroundGridTransform() {
+    return Matrix4.identity()
+      ..rotateX(-math.atan(1.0 / math.sqrt(2.0)))
+      ..rotateY(-math.pi / 4.0)
+      ..rotateX(math.pi / 2);
   }
 
   void _setupPowerUps() {
@@ -81,10 +106,9 @@ class CubeRunnerGame extends ChangeNotifier {
 
   void initialize(v.Vector2 viewport) {
     _viewport = Size(viewport.x, viewport.y);
-    // Center camera on player initially
-    // Use _isoMatrix for projection to match rendering
-    final projected = _isoMatrix.transformed3(v.Vector3(playerX * gridSize, 0, playerZ * gridSize));
-    camera.position = v.Vector2(projected.x, projected.y);
+    // Centre the camera on the player. The camera projects, so this is a
+    // plain world position now.
+    _moveCameraTo(v.Vector3(playerX * gridSize, 0, playerZ * gridSize), instant: true);
 
     gameTimer.start();
     _spawnEnemies();
@@ -188,9 +212,11 @@ class CubeRunnerGame extends ChangeNotifier {
     gameTimer.update(Duration(milliseconds: (dt * 1000).round()));
     powerUps.update();
 
-    final currentTime = DateTime.now().millisecondsSinceEpoch;
+    // Agents run on the engine's dt now, not DateTime.now(). The wall-clock
+    // version ignored pausing and slow motion entirely.
     for (final enemy in enemies) {
-      enemy.update(playerX, playerZ, currentTime);
+      enemy.setTargetCell(playerX, playerZ);
+      enemy.process(dt);
     }
 
     if (!powerUps.isActive('shield')) {
@@ -250,9 +276,8 @@ class CubeRunnerGame extends ChangeNotifier {
       }
     }
 
-    final projected = _isoMatrix.transformed3(v.Vector3(pWx, 0, pWz));
-    camera.target = v.Vector2(projected.x, projected.y);
-    camera.update(dt);
+    _moveCameraTo(v.Vector3(pWx, 0, pWz));
+    camera.process(dt);
 
     if (enemies.isNotEmpty) {
       final dist = (enemies.first.x - playerX).abs() + (enemies.first.y - playerZ).abs();
@@ -330,8 +355,7 @@ class CubeRunnerGame extends ChangeNotifier {
     playerZ += rng.nextInt(30) - 15;
 
     // Reset camera to new pos instantly
-    final playerIso = isoGrid.project(v.Vector3(playerX * gridSize, 0, playerZ * gridSize));
-    camera.position = v.Vector2(playerIso.dx, playerIso.dy);
+    _moveCameraTo(v.Vector3(playerX * gridSize, 0, playerZ * gridSize), instant: true);
 
     _spawnEnemies();
   }
@@ -345,16 +369,12 @@ class CubeRunnerGame extends ChangeNotifier {
     //   ..rotateX(-math.atan(1.0 / math.sqrt(2.0)))
     //   ..rotateY(-math.pi / 4.0);
 
-    // Helper: Project 3D world pos -> True Iso 2D -> Screen 2D (via Camera)
+    // World -> screen in one step: the camera carries the isometric pose.
+    final viewportVec = v.Vector2(_viewport.width, _viewport.height);
     v.Vector3 toScreen(v.Vector3 worldPos) {
-      // 1. Isometric Projection
-      final projected = _isoMatrix.transformed3(worldPos);
-
-      // 2. Camera Transform (2D)
-      final screen = camera.worldToScreen(v.Vector2(projected.x, projected.y), _viewport);
-
-      if (screen.dx.isNaN || screen.dy.isNaN) return v.Vector3.zero();
-      return v.Vector3(screen.dx, screen.dy, 0);
+      final screen = camera.worldToScreen(worldPos, viewportVec);
+      if (screen.x.isNaN || screen.y.isNaN) return v.Vector3.zero();
+      return v.Vector3(screen.x, screen.y, 0);
     }
 
     // Add Enhanced Grid Painter (Background)
@@ -403,7 +423,7 @@ class CubeRunnerGame extends ChangeNotifier {
       Positioned.fill(
         child: Transform(
           alignment: Alignment.center,
-          transform: Matrix4.copy(_isoMatrix)..rotateX(math.pi / 2),
+          transform: _backgroundGridTransform(),
           child: CustomPaint(
             painter: EnhancedGridPainter(
               cameraX: camX.toDouble(),
@@ -591,7 +611,7 @@ class CubeRunnerGame extends ChangeNotifier {
     powerUps.reset();
     enemies.clear();
 
-    camera.position = v.Vector2.zero();
+    _moveCameraTo(v.Vector3.zero(), instant: true);
 
     notifyListeners();
   }

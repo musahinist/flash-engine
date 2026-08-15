@@ -97,6 +97,21 @@ class FEngine extends ChangeNotifier {
     _ticker = Ticker(_tick);
   }
 
+  /// The fallback camera used when no FCamera widget is present.
+  ///
+  /// It is attached to the scene so it receives process() ticks like any other
+  /// node — the old lazily-created one lived outside the tree, so follow and
+  /// shake would silently do nothing on it.
+  FCameraNode _ensureDefaultCamera() {
+    var camera = _defaultCamera;
+    if (camera == null) {
+      camera = FCameraNode(name: 'DefaultCamera');
+      _defaultCamera = camera;
+      scene.addChild(camera);
+    }
+    return camera;
+  }
+
   /// Register a camera when it's added to the scene
   void registerCamera(FCameraNode camera) {
     _activeCameras.add(camera);
@@ -170,13 +185,7 @@ class FEngine extends ChangeNotifier {
     }
 
     // Use first visible registered camera (O(1) instead of O(n) tree traversal)
-    activeCamera = _activeCameras.firstWhere(
-      (cam) => cam.visible,
-      orElse: () {
-        _defaultCamera ??= FCameraNode(name: 'DefaultCamera');
-        return _defaultCamera!;
-      },
-    );
+    activeCamera = _activeCameras.firstWhere((cam) => cam.visible, orElse: _ensureDefaultCamera);
 
     // Update Audio Listener
     audio.updateListener(activeCamera!);
