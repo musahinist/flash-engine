@@ -22,6 +22,10 @@ import 'package:vector_math/vector_math_64.dart' as v;
 ///
 /// These are **not** pass/fail tests. They print a report and assert only that
 /// the engine did not fall over. Compare numbers across commits by hand.
+/// Mirrors g_parallelThreshold's default in src/native/particles.cpp, so the
+/// sweeps below can force each path and then restore normal behaviour.
+const int kDefaultParallelThreshold = 4096;
+
 void main() {
   /// Drives [frames] engine ticks without a Ticker, so the loop runs as fast
   /// as the machine allows instead of being paced to vsync.
@@ -260,67 +264,167 @@ void main() {
       report('paint path: 1000 boxes, ${engine.renderNodes.length} in render list', engine);
     });
 
+    test('serial vs parallel crossover', () {
+        // ignore: avoid_print
+      print('\n  ${'count'.padLeft(8)}${'serial'.padLeft(10)}${'parallel'.padLeft(10)}${'ratio'.padLeft(9)}');
+        for (final count in [500, 1000, 2000, 4000, 8000, 16000, 32000, 64000]) {
+          final engine = FEngine();
+          final emitter = FParticleEmitter(
+            config: ParticleEmitterConfig(
+              emissionRate: count * 60.0,
+              maxParticles: count,
+              lifetimeMin: 60,
+              lifetimeMax: 60,
+              gravity: v.Vector3.zero(),
+              shapeType: 3,
+              startColor: Colors.orange,
+            ),
+          );
+          engine.scene.addChild(emitter);
+          while (emitter.activeCount < count) {
+            engine.debugTick(1 / 60);
+          }
+
+          const vpp = 30;
+          final cap = emitter.activeCount;
+          final vertices = calloc<Float>(cap * vpp * 2);
+          final colors = calloc<Uint32>(cap * vpp);
+          final matrix = calloc<Float>(16);
+          for (int i = 0; i < 16; i++) {
+            matrix[i] = 0;
+          }
+          matrix[0] = 1;
+          matrix[5] = 1;
+          matrix[10] = 1;
+          matrix[15] = 1000;
+
+          double run(int n) {
+            final sw = Stopwatch()..start();
+            for (int i = 0; i < n; i++) {
+              native.fillVertexBuffer(emitter.nativeEmitterPointer, matrix, vertices, colors, cap);
+            }
+            sw.stop();
+            return sw.elapsedMicroseconds / n / 1000;
+          }
+
+          native.setParticleParallelThreshold(1 << 30);
+          run(50);
+          final s = run(300);
+          native.setParticleParallelThreshold(0);
+          run(50);
+          final p = run(300);
+
+          // ignore: avoid_print
+      print('  ${cap.toString().padLeft(8)}${s.toStringAsFixed(3).padLeft(10)}'
+              '${p.toStringAsFixed(3).padLeft(10)}${(s / p).toStringAsFixed(2).padLeft(9)}');
+
+          calloc.free(vertices);
+          calloc.free(colors);
+          calloc.free(matrix);
+          engine.dispose();
+        }
+        native.setParticleParallelThreshold(kDefaultParallelThreshold);
+    });
+
     test('particle vertex fill (paint path)', () {
       // fill_vertex_buffer is only reached through FPainter, which needs a real
       // CustomPaint — so the engine-loop scenarios above never touch it. This
       // drives it directly, because it is the path the 1M-particle target
       // actually depends on.
-      final engine = FEngine();
-      addTearDown(engine.dispose);
+      //
+      // Swept over both shape and count, and reported in MB/s as well as ms,
+      // because the interesting question is whether this function is compute
+      // bound (in which case threads help) or bandwidth bound (in which case
+      // nothing does except writing fewer bytes). A 12-sided particle emits 30
+      // vertices; the shape the 1M demo uses emits 3.
+      const cases = [
+        (shape: 3, sides: 12, count: 100000, label: '12-sided'),
+        (shape: 4, sides: 3, count: 100000, label: 'triangle'),
+        (shape: 4, sides: 3, count: 1000000, label: 'triangle'),
+        (shape: 0, sides: 4, count: 1000000, label: 'quad'),
+        // The heaviest configuration the demo can actually reach: 12-sided is
+        // capped at 500k, only the triangle shape goes to 1M.
+        (shape: 3, sides: 12, count: 500000, label: '12-sided'),
+      ];
 
-      final emitter = FParticleEmitter(
-        config: ParticleEmitterConfig(
-          emissionRate: 200000,
-          maxParticles: 100000,
-          lifetimeMin: 5,
-          lifetimeMax: 8,
-          shapeType: 3, // 12-sided: the most vertices per particle
-          startColor: Colors.orange,
-        ),
-      );
-      engine.scene.addChild(emitter);
-      for (int i = 0; i < 60; i++) {
-        engine.debugTick(1 / 60);
-      }
+      // ignore: avoid_print
+      print('\n=== particle vertex fill ===');
+      // ignore: avoid_print
+      print('  pool concurrency: ${native.particlePoolConcurrency()} threads');
+      // ignore: avoid_print
+      print('  ${'shape'.padRight(10)}${'count'.padLeft(9)}'
+          '${'serial'.padLeft(10)}${'parallel'.padLeft(10)}${'MB'.padLeft(8)}${'GB/s'.padLeft(8)}');
 
-      const maxVertsPerParticle = 30;
-      final capacity = emitter.activeCount;
-      final vertices = calloc<Float>(capacity * maxVertsPerParticle * 2);
-      final colors = calloc<Uint32>(capacity * maxVertsPerParticle);
-      final matrix = calloc<Float>(16);
-      addTearDown(() {
+      for (final c in cases) {
+        final engine = FEngine();
+        final emitter = FParticleEmitter(
+          config: ParticleEmitterConfig(
+            emissionRate: c.count * 60.0,
+            maxParticles: c.count,
+            lifetimeMin: 60,
+            lifetimeMax: 60,
+            gravity: v.Vector3.zero(),
+            shapeType: c.shape,
+            startColor: Colors.orange,
+          ),
+        );
+        engine.scene.addChild(emitter);
+        while (emitter.activeCount < c.count) {
+          engine.debugTick(1 / 60);
+        }
+
+        // A fan of `sides` corners is (sides - 2) triangles, 3 vertices each.
+        final vertsPerParticle = (c.sides - 2) * 3;
+        final capacity = emitter.activeCount;
+        final vertices = calloc<Float>(capacity * vertsPerParticle * 2);
+        final colors = calloc<Uint32>(capacity * vertsPerParticle);
+        final matrix = calloc<Float>(16);
+        for (int i = 0; i < 16; i++) {
+          matrix[i] = 0;
+        }
+        matrix[0] = 1;
+        matrix[5] = 1;
+        matrix[10] = 1;
+        matrix[15] = 1000;
+
+        double run(int iterations) {
+          final sw = Stopwatch()..start();
+          for (int i = 0; i < iterations; i++) {
+            native.fillVertexBuffer(
+                emitter.nativeEmitterPointer, matrix, vertices, colors, capacity);
+          }
+          sw.stop();
+          return sw.elapsedMicroseconds / iterations / 1000;
+        }
+
+        // Force each path in turn over identical input.
+        native.setParticleParallelThreshold(1 << 30);
+        run(3);
+        final serialMs = run(20);
+
+        native.setParticleParallelThreshold(0);
+        run(3);
+        final parallelMs = run(20);
+        native.setParticleParallelThreshold(kDefaultParallelThreshold);
+
+        // 2 floats per vertex plus a uint32 colour per vertex.
+        final bytes = capacity * vertsPerParticle * (2 * 4 + 4);
+        final mb = bytes / (1024 * 1024);
+        final best = serialMs < parallelMs ? serialMs : parallelMs;
+        final gbs = bytes / (best / 1000) / (1024 * 1024 * 1024);
+
+        // ignore: avoid_print
+        print('  ${c.label.padRight(10)}${capacity.toString().padLeft(9)}'
+            '${serialMs.toStringAsFixed(2).padLeft(10)}'
+            '${parallelMs.toStringAsFixed(2).padLeft(10)}'
+            '${mb.toStringAsFixed(0).padLeft(8)}'
+            '${gbs.toStringAsFixed(1).padLeft(8)}');
+
         calloc.free(vertices);
         calloc.free(colors);
         calloc.free(matrix);
-      });
-      // A plain perspective-ish matrix; only w must stay positive.
-      for (int i = 0; i < 16; i++) {
-        matrix[i] = 0;
+        engine.dispose();
       }
-      matrix[0] = 1;
-      matrix[5] = 1;
-      matrix[10] = 1;
-      matrix[15] = 1000;
-
-      final sw = Stopwatch()..start();
-      const iterations = 60;
-      var rendered = 0;
-      for (int i = 0; i < iterations; i++) {
-        rendered = native.fillVertexBuffer(
-          emitter.nativeEmitterPointer,
-          matrix,
-          vertices,
-          colors,
-          capacity,
-        );
-      }
-      sw.stop();
-
-      // ignore: avoid_print
-      print('\n=== particle vertex fill ===\n'
-          '  ${emitter.activeCount} particles, 12 sides, $rendered rendered\n'
-          '  ${(sw.elapsedMicroseconds / iterations / 1000).toStringAsFixed(3)} ms per fill');
-      expect(rendered, greaterThan(0));
     });
   });
 }

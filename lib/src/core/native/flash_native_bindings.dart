@@ -391,6 +391,17 @@ external int fillVertexBuffer(
   int maxRenderCount,
 );
 
+/// Particle count at or above which the vertex fill runs across the thread
+/// pool. Returns the previous threshold. Exposed for benchmarks, so the
+/// crossover between the serial and parallel paths can be measured on
+/// identical input rather than assumed.
+@Native<Int32 Function(Int32)>(symbol: 'set_particle_parallel_threshold', isLeaf: true)
+external int setParticleParallelThreshold(int threshold);
+
+/// How many threads a pool dispatch runs across, including the caller.
+@Native<Int32 Function()>(symbol: 'particle_pool_concurrency', isLeaf: true)
+external int particlePoolConcurrency();
+
 // --- Physics world ---
 
 @Native<Pointer<PhysicsWorld> Function(Int32)>(symbol: 'create_physics_world')

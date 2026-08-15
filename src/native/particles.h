@@ -49,6 +49,14 @@ FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float 
 /// (fewer if the emitter filled up). [seed] advances the internal RNG so the
 /// caller can reproduce a sequence.
 FLASH_API int emit_particles(ParticleEmitter* emitter, const EmitParams* params, int count, uint32_t seed);
+/// Particle count at or above which the vertex fill runs across the thread
+/// pool. Exposed so a benchmark can measure both paths on identical input.
+/// Returns the previous threshold.
+FLASH_API int set_particle_parallel_threshold(int threshold);
+
+/// How many threads a pool dispatch runs across, including the caller.
+FLASH_API int particle_pool_concurrency();
+
 FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* matrix, float* vertices, uint32_t* colors, int maxRenderCount);
 
 }

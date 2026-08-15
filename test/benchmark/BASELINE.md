@@ -221,11 +221,77 @@ Cheap Dart wins the measurement did surface:
   `dynamic operator *(dynamic)`, so it both allocates and cannot devirtualise.
 
 **Phase 4 is not being done as specified.** The remaining budget goes to the
-1M-particle target instead, where the engine is genuinely far from its stated
-goal: `fill_vertex_buffer` is 0.920 ms at 100k particles single-threaded, so
-about 9.2 ms at 1M — a whole 60 fps frame, spent in one function. The parallel
-path that would fix it is dead code today (threshold 100,000, and it spawns and
-joins eight `std::thread`s per frame when it does run).
+1M-particle target instead — see below.
+
+---
+
+# The particle vertex fill, and a correction
+
+The paragraph above originally read that `fill_vertex_buffer` was "0.920 ms at
+100k particles single-threaded, so about 9.2 ms at 1M — a whole 60 fps frame".
+**That extrapolation was wrong**, in two ways, and measuring it is what showed
+that up.
+
+It scaled the 12-sided shape out to 1M particles. The demo cannot reach that
+combination: `native_particle_demo` caps at `isTriangleMode ? 1000000 : 500000`,
+and triangle mode is a 3-vertex shape. So 1M particles only ever run at 3
+vertices each, not 30. And the 0.920 ms figure was not single-threaded — 100,000
+is not *below* a threshold of 100,000, so it had already taken the old parallel
+path.
+
+Measured, on 8 threads:
+
+| shape | count | serial | parallel | bytes written | |
+|---|---|---|---|---|---|
+| 12-sided | 100,000 | 1.71 ms | **0.93 ms** | 34 MB | 1.8x |
+| triangle | 100,000 | 0.57 ms | **0.18 ms** | 3 MB | 3.2x |
+| triangle | 1,000,000 | 5.83 ms | **2.13 ms** | 34 MB | 2.7x |
+| quad | 1,000,000 | 7.46 ms | **2.95 ms** | 69 MB | 2.5x |
+| 12-sided | 500,000 | 8.37 ms | **4.93 ms** | 172 MB | 1.7x |
+
+**The stated 1M target costs 2.13 ms, not 9.2 ms.** That is 13% of a 60 fps
+budget, on the shape the demo actually uses at that count. The heaviest
+configuration the demo can reach at all is 500k 12-sided, at 4.93 ms.
+
+The two 34 MB rows are the useful comparison: 12-sided at 100k and triangle at
+1M write the same number of bytes, but the 1M row takes 2.3x as long. So this is
+not purely bandwidth-bound — per-particle work (the projection, the culling
+test, the fan expansion) matters as much as the output volume. That is why more
+threads help at all; it is also why they help less than linearly, and why the
+36 GB/s rows are close to the ceiling.
+
+## The thread pool
+
+The parallel path used to construct `std::thread`s per chunk per pass per frame
+— two spawn-and-join barriers every frame. Thread construction costs on the
+order of the work being handed out, which is presumably why the threshold was
+set at 100,000 and, at that value, effectively never engaged for a real emitter.
+
+A persistent pool (`src/native/thread_pool.h`) parks its workers on a condition
+variable, so dispatching is a lock, a counter bump and a notify. The calling
+thread joins in rather than blocking. Chunks are claimed atomically and there
+are 4x more of them than threads, so a chunk that is mostly culled does not
+leave its thread idle.
+
+That drops the dispatch cost to a flat ~0.03 ms, which is what lets the
+threshold fall from 100,000 to **4,096** — measured, not guessed:
+
+| particles | serial | parallel | ratio |
+|---|---|---|---|
+| 1,000 | 0.016 ms | 0.033 ms | 0.48 |
+| 2,000 | 0.033 ms | 0.040 ms | 0.81 |
+| **4,000** | 0.071 ms | 0.052 ms | **1.36** |
+| 8,000 | 0.128 ms | 0.069 ms | 1.87 |
+| 32,000 | 0.530 ms | 0.156 ms | 3.40 |
+
+The crossover is near 3,000. Below it the serial path genuinely wins and the
+threshold keeps it. The band from ~4k to 100k particles is where the old
+threshold was leaving 2-3x on the table for every emitter in every demo.
+
+`set_particle_parallel_threshold` is exported so both paths can be driven over
+identical input — that is what the table above is, and what
+`test/particle_parallel_test.dart` uses to assert the two produce byte-identical
+vertex and colour buffers with visibility deliberately uneven across chunks.
 
 ## Known bug found while testing
 

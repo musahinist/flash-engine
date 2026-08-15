@@ -1,5 +1,5 @@
 #include "particles.h"
-#include <thread>
+#include "thread_pool.h"
 #include <vector>
 #include <algorithm>
 
@@ -107,6 +107,7 @@ struct ThreadWork {
     int startIdx;
     int endIdx;
     int visibleCount;
+    int outputOffset;
     std::vector<int> visibleIndices;
     // 1/w carried from pass1 so pass2 does not recompute the projection depth.
     std::vector<float> visibleInvW;
@@ -199,16 +200,49 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
     }
 }
 
+// Below this many particles the serial path wins: a pool dispatch costs a flat
+// ~0.03 ms, which is more than the work itself on a small emitter. Measured,
+// not guessed — the crossover benchmark puts it near 3,000 (ratio 0.84 at
+// 2,000, 1.12 at 4,000, 1.95 at 8,000), so this sits just past it.
+//
+// The previous threshold was 100,000, chosen to dodge `std::thread`
+// construction. The pool removes that cost, which is what lets this drop by
+// more than an order of magnitude and actually engage for real emitters.
+static int g_parallelThreshold = 4096;
+
+// Test/benchmark hook: lets a benchmark run the same input down both paths to
+// find where the crossover actually is, instead of the threshold being a guess
+// that nobody can check. Returns the previous value.
+FLASH_API int set_particle_parallel_threshold(int threshold) {
+    const int previous = g_parallelThreshold;
+    g_parallelThreshold = threshold;
+    return previous;
+}
+
+/// Threads the pool will run a dispatch across, counting the caller.
+FLASH_API int particle_pool_concurrency() {
+    return flash::ThreadPool::instance().concurrency();
+}
+
+// Reused across frames so the per-chunk index vectors keep their capacity
+// instead of reallocating every frame. fill_vertex_buffer is only ever called
+// from Dart's UI thread during paint, one emitter at a time, so a single set of
+// scratch buffers is enough — and the pool has finished with them before this
+// function returns.
+static std::vector<ThreadWork>& chunk_scratch(int chunks) {
+    static std::vector<ThreadWork> works;
+    if ((int)works.size() < chunks) works.resize(chunks);
+    return works;
+}
+
 FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, int maxRenderCount) {
     if (!emitter || !emitter->particles || emitter->activeCount == 0) return 0;
 
-    int totalToProcess = std::min(emitter->activeCount, maxRenderCount);
-    
-    // Performance optimization: Avoid thread-spawning overhead for small-medium counts.
-    // std::thread is expensive to create every frame. 
-    // Single-threaded is often faster for up to 100k particles on modern CPUs.
-    if (totalToProcess < 100000) {
-        ThreadWork work;
+    const int totalToProcess = std::min(emitter->activeCount, maxRenderCount);
+    if (totalToProcess <= 0) return 0;
+
+    if (totalToProcess < g_parallelThreshold) {
+        ThreadWork& work = chunk_scratch(1)[0];
         work.startIdx = 0;
         work.endIdx = totalToProcess;
         fill_chunk_pass1(emitter, m, work);
@@ -218,36 +252,40 @@ FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* m, float* vert
         return work.visibleCount;
     }
 
-    unsigned int numThreads = std::min((unsigned int)4, std::thread::hardware_concurrency());
-    if (numThreads < 1) numThreads = 1;
+    flash::ThreadPool& pool = flash::ThreadPool::instance();
 
-    std::vector<ThreadWork> works(numThreads);
-    std::vector<std::thread> threads;
-    int chunkSize = totalToProcess / numThreads;
+    // More chunks than threads, so a chunk that happens to be mostly culled
+    // does not leave its thread idle while another is still grinding. The
+    // offsets pass below needs chunks in index order, which atomic claiming
+    // preserves because the chunk *bounds* are assigned up front.
+    int chunks = pool.concurrency() * 4;
+    if (chunks > totalToProcess) chunks = totalToProcess;
 
-    for (unsigned int t = 0; t < numThreads; ++t) {
-        works[t].startIdx = t * chunkSize;
-        works[t].endIdx = (t == numThreads - 1) ? totalToProcess : (t + 1) * chunkSize;
-        threads.emplace_back(fill_chunk_pass1, emitter, m, std::ref(works[t]));
+    std::vector<ThreadWork>& works = chunk_scratch(chunks);
+    const int chunkSize = totalToProcess / chunks;
+    for (int c = 0; c < chunks; ++c) {
+        works[c].startIdx = c * chunkSize;
+        works[c].endIdx = (c == chunks - 1) ? totalToProcess : (c + 1) * chunkSize;
     }
-    for (auto& t : threads) t.join();
-    threads.clear();
 
+    pool.parallel_for(chunks, [&](int c) {
+        fill_chunk_pass1(emitter, m, works[c]);
+    });
+
+    // Serial: each chunk's output offset is the sum of the visible counts
+    // before it, which is what makes the second pass's writes disjoint.
     int totalVisible = 0;
-    std::vector<int> offsets(numThreads);
-    for (unsigned int t = 0; t < numThreads; ++t) {
-        offsets[t] = totalVisible;
-        totalVisible += works[t].visibleCount;
+    for (int c = 0; c < chunks; ++c) {
+        works[c].outputOffset = totalVisible;
+        totalVisible += works[c].visibleCount;
     }
-
     if (totalVisible == 0) return 0;
 
-    for (unsigned int t = 0; t < numThreads; ++t) {
-        if (works[t].visibleCount > 0) {
-            threads.emplace_back(fill_chunk_pass2, emitter, m, vertices, colors, std::ref(works[t]), offsets[t]);
+    pool.parallel_for(chunks, [&](int c) {
+        if (works[c].visibleCount > 0) {
+            fill_chunk_pass2(emitter, m, vertices, colors, works[c], works[c].outputOffset);
         }
-    }
-    for (auto& t : threads) t.join();
+    });
 
     return totalVisible;
 }
