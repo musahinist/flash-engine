@@ -313,13 +313,85 @@ class FCameraNode extends FNode {
     return Vector2(p.x / p.w, p.y / p.w);
   }
 
-  /// The axis-aligned world rectangle this camera can see on the XZ plane.
+  /// The camera's footprint on the XZ ground plane, in world units.
   ///
-  /// Used by tilemaps to decide which cells to draw; a batch renderer needs
-  /// this to avoid walking an infinite grid.
+  /// `left`/`right` are world X and `top`/`bottom` are world **Z** — grids live
+  /// on XZ with +Y as height, and every caller (tilemaps, [FGridNode], grid
+  /// painters) reads it that way.
+  ///
+  /// Computed by unprojecting the four viewport corners onto `y = 0`, so it is
+  /// correct for a top-down camera and for an isometric one, whose footprint is
+  /// a diamond this bounds. It used to be built from the camera's *x and y*
+  /// with `z` as the viewing distance, which described a camera looking down
+  /// -Z at the XY plane — the opposite of the plane grids use. A top-down
+  /// camera at height 1000 therefore reported a band around `z = 1000`, and a
+  /// tilemap centred on the origin drew nothing at all.
+  ///
+  /// A camera looking along the horizon sees a ground plane that runs to
+  /// infinity; there is no finite answer, so that case falls back to a
+  /// viewport-sized box around the camera.
   Rect getVisibleWorldRect(Vector2 viewportSize) {
-    final pos = worldPosition;
-    final half = getWorldBounds((pos.z).abs(), viewportSize);
-    return Rect.fromLTRB(pos.x - half.x, pos.y - half.y, pos.x + half.x, pos.y + half.y);
+    if (viewportSize.x <= 0 || viewportSize.y <= 0) return Rect.zero;
+
+    _refreshMatrices(viewportSize.x, viewportSize.y);
+    _screenToWorld
+      ..setFrom(_cachedScreen)
+      ..invert();
+
+    var minX = double.infinity, maxX = double.negativeInfinity;
+    var minZ = double.infinity, maxZ = double.negativeInfinity;
+    var hits = 0;
+
+    for (int corner = 0; corner < 4; corner++) {
+      final sx = (corner & 1) == 0 ? 0.0 : viewportSize.x;
+      final sy = (corner & 2) == 0 ? 0.0 : viewportSize.y;
+
+      // Two points along the same pixel, at the near and far clip planes: the
+      // segment between them is that pixel's ray through the world.
+      final near = _unproject(sx, sy, -1);
+      final far = _unproject(sx, sy, 1);
+      if (near == null || far == null) continue;
+
+      final dy = far.y - near.y;
+      if (dy.abs() < 1e-6) continue; // parallel to the ground
+      final t = -near.y / dy;
+      if (!t.isFinite) continue;
+
+      final x = near.x + (far.x - near.x) * t;
+      final z = near.z + (far.z - near.z) * t;
+      if (!x.isFinite || !z.isFinite) continue;
+
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+      hits++;
+    }
+
+    if (hits < 4) {
+      // Horizon in view, or a degenerate matrix. Bound it by the camera's own
+      // height so callers still get something finite to iterate.
+      final pos = worldPosition;
+      final half = getWorldBounds(pos.y.abs(), viewportSize);
+      return Rect.fromLTRB(pos.x - half.x, pos.z - half.y, pos.x + half.x, pos.z + half.y);
+    }
+
+    return Rect.fromLTRB(minX, minZ, maxX, maxZ);
+  }
+
+  final Matrix4 _screenToWorld = Matrix4.identity();
+  final Vector4 _unprojectScratch = Vector4.zero();
+
+  /// Screen pixel plus a clip-space depth back to a world point.
+  Vector3? _unproject(double sx, double sy, double clipZ) {
+    _unprojectScratch.setValues(sx, sy, clipZ, 1.0);
+    _screenToWorld.transform(_unprojectScratch);
+    final w = _unprojectScratch.w;
+    if (w == 0 || !w.isFinite) return null;
+    return Vector3(
+      _unprojectScratch.x / w,
+      _unprojectScratch.y / w,
+      _unprojectScratch.z / w,
+    );
   }
 }

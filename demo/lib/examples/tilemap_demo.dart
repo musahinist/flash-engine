@@ -31,7 +31,7 @@ class _TileMapDemoState extends State<TileMapDemo> {
   late FProceduralTilemap _map = _buildMap(_seed);
 
   int _seed = 42;
-  double _cameraHeight = 900;
+  double _zoom = 420;
   bool _showCollectibles = true;
   int _collected = 0;
 
@@ -80,12 +80,12 @@ class _TileMapDemoState extends State<TileMapDemo> {
             _DPad(onMove: _pan),
             const SizedBox(height: DemoTheme.gap),
             DemoSlider(
-              label: 'Camera height',
-              value: _cameraHeight,
-              min: 400,
-              max: 2200,
+              label: 'Zoom',
+              value: _zoom,
+              min: 150,
+              max: 1200,
               fractionDigits: 0,
-              onChanged: (value) => setState(() => _cameraHeight = value),
+              onChanged: (value) => setState(() => _zoom = value),
             ),
           ],
         ),
@@ -128,8 +128,15 @@ class _TileMapDemoState extends State<TileMapDemo> {
         autoUpdate: false,
         child: Stack(
           children: [
-            // Looking down the grid plane from above.
-            FCamera(position: v.Vector3(centre.x, _cameraHeight, centre.z), fov: 60),
+            // Orthographic and pitched straight down. Parking a perspective
+            // camera above the plane without rotating it points it along -Z,
+            // so the grid is behind the camera and nothing is drawn.
+            FCamera(
+              position: v.Vector3(centre.x, 1000, centre.z),
+              rotation: v.Vector3(-math.pi / 2, 0, 0),
+              isOrthographic: true,
+              orthographicSize: _zoom,
+            ),
 
             FGridView(
               grid: _grid,

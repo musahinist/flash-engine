@@ -1,12 +1,11 @@
 import 'package:flutter/widgets.dart';
+
+import '../../core/systems/engine.dart';
 import '../framework.dart';
 
-/// FAnimated - A declarative animation widget that rebuilds on every engine frame.
+/// Rebuilds its subtree every engine frame, handing the builder the engine's
+/// elapsed time in seconds.
 ///
-/// Provides `elapsed` time (in seconds) to the builder for time-based animations
-/// without manual setState calls.
-///
-/// Example:
 /// ```dart
 /// FAnimated(
 ///   builder: (context, elapsed) => FSphere(
@@ -14,27 +13,31 @@ import '../framework.dart';
 ///   ),
 /// )
 /// ```
+///
+/// This has to listen to the engine itself. It used to be a `StatelessWidget`
+/// that read `context.flash` and returned `builder(context, engine.elapsed)`,
+/// which looked right and never animated: `context.flash` depends on
+/// `InheritedFNode`, whose `updateShouldNotify` compares the engine and the
+/// node — both of which are the same objects on every frame, so it never
+/// notified. And because `FView` hands its subtree the identical child widget
+/// each rebuild, Flutter short-circuited the subtree too. The result was a
+/// builder that ran exactly once, for the lifetime of the widget.
 class FAnimated extends StatelessWidget {
-  /// Builder that receives current context and elapsed time in seconds.
-  final Widget Function(BuildContext context, double elapsed) builder;
-
   const FAnimated({super.key, required this.builder});
+
+  /// Receives the engine's elapsed time, in seconds.
+  final Widget Function(BuildContext context, double elapsed) builder;
 
   @override
   Widget build(BuildContext context) {
-    final engine = context.flash;
-    if (engine == null) {
-      return const SizedBox.shrink();
-    }
-    return builder(context, engine.elapsed);
+    return _EngineFrame(
+      builder: (context, engine) => builder(context, engine.elapsed),
+    );
   }
 }
 
-/// FAnimatedList - A declarative animation widget that builds a list of widgets.
+/// [FAnimated] for a list of children, for scenes built from one clock.
 ///
-/// Useful for building multiple animated elements from the same elapsed time.
-///
-/// Example:
 /// ```dart
 /// FAnimatedList(
 ///   builder: (context, elapsed) => [
@@ -44,19 +47,37 @@ class FAnimated extends StatelessWidget {
 /// )
 /// ```
 class FAnimatedList extends StatelessWidget {
-  /// Builder that receives current context and elapsed time in seconds.
-  /// Returns a list of widgets to display.
+  const FAnimatedList({super.key, required this.builder});
+
+  /// Receives the engine's elapsed time and returns the children to show.
   final List<Widget> Function(BuildContext context, double elapsed) builder;
 
-  const FAnimatedList({super.key, required this.builder});
+  @override
+  Widget build(BuildContext context) {
+    return _EngineFrame(
+      builder: (context, engine) => Stack(children: builder(context, engine.elapsed)),
+    );
+  }
+}
+
+/// Rebuilds `builder` whenever the engine ticks.
+///
+/// [FEngine] is a `Listenable` that notifies once per frame, so subscribing to
+/// it directly is what makes the rebuild happen — rather than relying on an
+/// ancestor to rebuild, which is the trap the previous version fell into.
+class _EngineFrame extends StatelessWidget {
+  const _EngineFrame({required this.builder});
+
+  final Widget Function(BuildContext context, FEngine engine) builder;
 
   @override
   Widget build(BuildContext context) {
     final engine = context.flash;
-    if (engine == null) {
-      return const SizedBox.shrink();
-    }
-    final widgets = builder(context, engine.elapsed);
-    return Stack(children: widgets);
+    if (engine == null) return const SizedBox.shrink();
+
+    return ListenableBuilder(
+      listenable: engine,
+      builder: (context, _) => builder(context, engine),
+    );
   }
 }

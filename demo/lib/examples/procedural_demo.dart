@@ -119,7 +119,12 @@ class _ProceduralDemoState extends State<ProceduralDemo> {
         autoUpdate: false,
         child: Stack(
           children: [
-            FCamera(position: v.Vector3(centre.x, 1000, centre.z), fov: 60),
+            FCamera(
+              position: v.Vector3(centre.x, 1000, centre.z),
+              rotation: v.Vector3(-math.pi / 2, 0, 0),
+              isOrthographic: true,
+              orthographicSize: 420,
+            ),
             FGridView(
               grid: _grid,
               children: [

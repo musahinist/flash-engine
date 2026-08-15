@@ -148,7 +148,12 @@ class _GridAiDemoState extends State<GridAiDemo> {
         onReady: (engine) => _engine = engine..tree.paused = _paused,
         child: Stack(
           children: [
-            FCamera(position: v.Vector3(0, 1150, 0), fov: 55),
+            FCamera(
+              position: v.Vector3(0, 1150, 0),
+              rotation: v.Vector3(-math.pi / 2, 0, 0),
+              isOrthographic: true,
+              orthographicSize: 480,
+            ),
             FGridView(
               grid: _grid,
               children: [
