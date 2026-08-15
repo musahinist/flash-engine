@@ -7,7 +7,7 @@
 
 // Bumped whenever the exported C ABI changes (struct layout, signatures).
 // Dart mirrors this in FlashNative and checks it at load time.
-#define FLASH_ABI_VERSION 3
+#define FLASH_ABI_VERSION 4
 
 extern "C" {
 
@@ -98,6 +98,7 @@ struct NativeBody {
     uint32_t maskBits;
     int32_t proxyId;
     int isAwake;
+    int alive;           // 0 once the slot is released back to the free list
 };
 
 struct PhysicsWorld {
@@ -124,6 +125,12 @@ struct PhysicsWorld {
     int maxSoftBodies;
     int activeSoftBodies;
     
+    // Released body slots, reused by create_body before growing activeCount.
+    // Without this the pool leaked on every body removal and the removed body
+    // carried on being simulated.
+    int32_t* bodyFreeList;
+    int bodyFreeCount;
+
     // Broadphase dynamic tree
     struct DynamicTree* tree;
     
@@ -144,6 +151,11 @@ struct PhysicsWorld {
 FLASH_API PhysicsWorld* create_physics_world(int maxBodies);
 FLASH_API void destroy_physics_world(PhysicsWorld* world);
 FLASH_API void step_physics(PhysicsWorld* world, float dt);
+/// Releases a body's slot back to the pool: removes its broadphase proxy,
+/// drops any joint that referenced it, and purges its warm-start impulses so a
+/// later body reusing the slot does not inherit them.
+FLASH_API void destroy_body(PhysicsWorld* world, int32_t bodyId);
+
 FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits);
 FLASH_API int32_t get_physics_version();
 FLASH_API void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy);

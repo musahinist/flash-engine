@@ -8,7 +8,10 @@ extern "C" {
 // Helper: Get body from world
 static inline NativeBody* get_body(PhysicsWorld* world, uint32_t id) {
     if (id >= (uint32_t)world->activeCount) return nullptr;
-    return &world->bodies[id];
+    NativeBody* b = &world->bodies[id];
+    // A destroyed body keeps its slot until it is recycled. Solving a joint
+    // against one would apply impulses to a body that no longer exists.
+    return b->alive ? b : nullptr;
 }
 
 // Create joint

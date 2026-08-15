@@ -122,6 +122,10 @@ final class PhysicsWorld extends Struct {
   external int maxSoftBodies;
   @Int32()
   external int activeSoftBodies;
+
+  external Pointer<Int32> bodyFreeList;
+  @Int32()
+  external int bodyFreeCount;
 }
 
 final class NativeBody extends Struct {
@@ -179,6 +183,8 @@ final class NativeBody extends Struct {
   external int proxyId;
   @Int32()
   external int isAwake;
+  @Int32()
+  external int alive;
 }
 
 final class ParticleEmitter extends Struct {
@@ -382,6 +388,15 @@ external void destroyPhysicsWorld(Pointer<PhysicsWorld> world);
 
 @Native<Void Function(Pointer<PhysicsWorld>, Float)>(symbol: 'step_physics', isLeaf: true)
 external void stepPhysics(Pointer<PhysicsWorld> world, double dt);
+
+/// Releases a body's slot back to the pool.
+///
+/// Bodies used to be permanent: `create_body` handed out slots from a fixed
+/// pool with no way back, so a removed node left a body that carried on falling
+/// and colliding invisibly, and a scene that spawned bodies eventually ran the
+/// pool dry.
+@Native<Void Function(Pointer<PhysicsWorld>, Int32)>(symbol: 'destroy_body', isLeaf: true)
+external void destroyBody(Pointer<PhysicsWorld> world, int bodyId);
 
 @Native<Int32 Function(Pointer<PhysicsWorld>, Int32, Int32, Float, Float, Float, Float, Float, Uint32, Uint32)>(
   symbol: 'create_body',

@@ -1,8 +1,18 @@
-import 'package:flutter/material.dart';
-import 'package:flash/flash.dart';
-import 'package:vector_math/vector_math_64.dart' as v;
+import 'dart:async';
 import 'dart:math';
 
+import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
+
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// A pachinko board: static pegs and walls, dynamic bodies falling through.
+///
+/// Shows [FStaticBody] and [FRigidBody] against the native solver, and what
+/// stacking and resting contact look like when they are working.
 class PhysicsDemoExample extends StatefulWidget {
   const PhysicsDemoExample({super.key});
 
@@ -11,60 +21,79 @@ class PhysicsDemoExample extends StatefulWidget {
 }
 
 class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
-  // Persistent data to ensure stable keys and properties
+  /// Bodies are never destroyed by the native world — `create_body` hands out
+  /// slots from a fixed pool and there is no free list — so an unbounded
+  /// spawner eventually exhausts it and every later body silently fails to
+  /// appear. The oldest is retired once the board is full.
+  static const int _maxBodies = 120;
+
   final List<_BodyData> _bodies = [];
+  final Random _random = Random(7);
+  Timer? _spawnTimer;
   bool _autoSpawn = false;
 
+  @override
+  void dispose() {
+    _spawnTimer?.cancel();
+    super.dispose();
+  }
+
   void _spawnBody() {
-    final r = Random();
-    final isCircle = r.nextBool();
-    _bodies.add(
-      _BodyData(
-        key: UniqueKey(),
-        isCircle: isCircle,
-        // Random position at top
-        position: v.Vector3((r.nextDouble() - 0.5) * 40, 350, 0),
-        // Random size
-        size: 15.0 + r.nextDouble() * 15.0,
-        color: Colors.accents[r.nextInt(Colors.accents.length)],
-      ),
-    );
+    setState(() {
+      if (_bodies.length >= _maxBodies) _bodies.removeAt(0);
+      final isCircle = _random.nextBool();
+      _bodies.add(
+        _BodyData(
+          key: UniqueKey(),
+          isCircle: isCircle,
+          position: v.Vector3((_random.nextDouble() - 0.5) * 40, 350, 0),
+          size: 15.0 + _random.nextDouble() * 15.0,
+          color: Colors.accents[_random.nextInt(Colors.accents.length)],
+        ),
+      );
+    });
+  }
+
+  void _setAutoSpawn(bool value) {
+    setState(() => _autoSpawn = value);
+    _spawnTimer?.cancel();
+    if (value) {
+      // A Timer, not a `while (mounted) await Future.delayed(...)` loop. The
+      // loop version could not be cancelled — it kept a pending future alive
+      // past dispose and only noticed on its next tick.
+      _spawnTimer = Timer.periodic(const Duration(milliseconds: 600), (_) => _spawnBody());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('Stable Physics Demo'),
-        backgroundColor: Colors.black87,
-        actions: [
-          IconButton(
-            icon: Icon(_autoSpawn ? Icons.pause : Icons.play_arrow),
-            onPressed: () {
-              setState(() {
-                _autoSpawn = !_autoSpawn;
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _bodies.clear();
-                _autoSpawn = false;
-              });
-            },
-          ),
-        ],
-      ),
-      body: FView(
-        autoUpdate: false, // Fix: Prevent full widget tree rebuild every frame
+    return DemoPage(
+      title: 'Native Physics',
+      subtitle: 'FRigidBody and FStaticBody on the C++ solver.',
+      controls: [
+        DemoButton(label: 'Drop one', icon: Icons.south_rounded, onPressed: _spawnBody),
+        DemoToggle(label: 'Keep dropping', value: _autoSpawn, onChanged: _setAutoSpawn),
+        DemoButton(
+          label: 'Clear',
+          icon: Icons.refresh_rounded,
+          tint: DemoTheme.danger,
+          onPressed: () {
+            _setAutoSpawn(false);
+            setState(_bodies.clear);
+          },
+        ),
+      ],
+      readouts: [
+        DemoStat(label: 'Bodies', value: '${_bodies.length} / $_maxBodies'),
+      ],
+      hint: 'Bodies retire oldest-first at $_maxBodies; the native pool has no free list.',
+      scene: FView(
+        // The scene only changes when a body is added or removed, so there is
+        // no reason to rebuild the whole widget tree every frame.
+        autoUpdate: false,
         child: Stack(
           children: [
             FCamera(position: v.Vector3(0, 0, 1000)),
-
-            // --- Static World Geometry ---
             FStaticBody(
               name: 'Floor',
               position: v.Vector3(0, -400, 0),
@@ -89,11 +118,9 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
               color: Colors.grey[800]!,
               debugDraw: true,
             ),
-
-            // Pegs
             for (int row = 0; row < 6; row++)
               for (int col = -4; col <= 4; col++)
-                if ((row % 2 == 0 && col % 2 == 0) || (row % 2 != 0 && col % 2 != 0))
+                if (row.isEven == col.isEven)
                   FStaticBody.circle(
                     name: 'Peg_${row}_$col',
                     position: v.Vector3(col * 60.0, 200.0 - row * 70.0, 0),
@@ -101,19 +128,6 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
                     color: Colors.blueGrey,
                     debugDraw: true,
                   ),
-
-            // --- Dynamic Spawner ---
-            if (_autoSpawn)
-              _Spawner(
-                interval: const Duration(milliseconds: 800),
-                onTick: () {
-                  setState(() {
-                    _spawnBody();
-                  });
-                },
-              ),
-
-            // --- Dynamic Bodies ---
             for (final body in _bodies)
               body.isCircle
                   ? FRigidBody.circle(
@@ -128,7 +142,7 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
                       key: body.key,
                       name: 'Body_${body.key}',
                       position: body.position,
-                      size: body.size * 2, // Width = Radius * 2
+                      size: body.size * 2,
                       color: body.color,
                       debugDraw: true,
                     ),
@@ -140,48 +154,17 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
 }
 
 class _BodyData {
-  final Key key;
-  final bool isCircle;
-  final v.Vector3 position;
-  final double size;
-  final Color color;
-
-  _BodyData({
+  const _BodyData({
     required this.key,
     required this.isCircle,
     required this.position,
     required this.size,
     required this.color,
   });
-}
 
-// Logic widget to drive the spawning loop
-class _Spawner extends StatefulWidget {
-  final Duration interval;
-  final VoidCallback onTick;
-
-  const _Spawner({required this.interval, required this.onTick});
-
-  @override
-  State<_Spawner> createState() => _SpawnerState();
-}
-
-class _SpawnerState extends State<_Spawner> {
-  @override
-  void initState() {
-    super.initState();
-    _startTimer();
-  }
-
-  void _startTimer() async {
-    while (mounted) {
-      await Future.delayed(widget.interval);
-      if (mounted) {
-        widget.onTick();
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
+  final Key key;
+  final bool isCircle;
+  final v.Vector3 position;
+  final double size;
+  final Color color;
 }

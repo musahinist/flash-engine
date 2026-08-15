@@ -312,6 +312,38 @@ class FPhysicsBody extends FNode {
   /// Get the native physics world pointer
   WorldId get world => _world;
 
+  bool _released = false;
+
+  /// Whether this node still owns a native body.
+  bool get isReleased => _released;
+
+  /// Releases the native body when the node leaves the tree.
+  ///
+  /// Bodies used to be permanent. A removed node stopped being drawn but its
+  /// body stayed in the world: still falling, still generating contacts against
+  /// the bodies that were still visible, and still holding a slot in a pool
+  /// that had no way to reclaim one. A scene that spawned bodies over time
+  /// therefore drifted — invisible geometry pushing visible geometry around —
+  /// and eventually exhausted the pool, after which every new body silently
+  /// failed to appear.
+  void _releaseNativeBody() {
+    if (_released) return;
+    _released = true;
+    native.destroyBody(_world, bodyId);
+  }
+
+  @override
+  void propagateExitTree() {
+    super.propagateExitTree();
+    _releaseNativeBody();
+  }
+
+  @override
+  void dispose() {
+    _releaseNativeBody();
+    super.dispose();
+  }
+
   @override
   void draw(Canvas canvas) {
     if (!debugDraw) return;

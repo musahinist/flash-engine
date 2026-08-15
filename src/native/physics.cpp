@@ -83,6 +83,9 @@ FLASH_API PhysicsWorld* create_physics_world(int maxBodies) {
     // Create dynamic AABB tree for broadphase
     world->tree = create_dynamic_tree(maxBodies * 2);
     
+    world->bodyFreeList = (int32_t*)calloc(maxBodies, sizeof(int32_t));
+    world->bodyFreeCount = 0;
+
     // Broadphase pair scratch, sized once (was allocated every step).
     world->maxPairs = maxBodies * 8;
     world->pairScratch = (BroadphasePair*)calloc(world->maxPairs, sizeof(BroadphasePair));
@@ -106,6 +109,7 @@ FLASH_API void destroy_physics_world(PhysicsWorld* world) {
     destroy_dynamic_tree(world->tree);
     free(world->boxJoints);
     free(world->pairScratch);
+    free(world->bodyFreeList);
 
     for (int i = 0; i < world->activeSoftBodies; ++i) {
         free(world->softBodies[i].points);
@@ -334,6 +338,7 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     // Phase 1: Update Broadphase Tree
     for (int i = 0; i < world->activeCount; ++i) {
         NativeBody& b = world->bodies[i];
+        if (!b.alive) continue;
         b.collision_count = 0;
         if (b.type == STATIC) continue;
         
@@ -405,7 +410,7 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     // Phase 2: Integrate Velocities & Apply Sleep
     for (int i = 0; i < world->activeCount; ++i) {
         NativeBody& b = world->bodies[i];
-        if (b.type == STATIC) continue;
+        if (!b.alive || b.type == STATIC) continue;
         
         // Sleep check
         if (b.vx * b.vx + b.vy * b.vy < 0.2f && std::abs(b.angularVelocity) < 0.2f && 
@@ -563,7 +568,7 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     // Phase 4: Integrate Positions
     for (int i = 0; i < world->activeCount; ++i) {
         NativeBody& b = world->bodies[i];
-        if (b.type == STATIC || !b.isAwake) continue;
+        if (!b.alive || b.type == STATIC || !b.isAwake) continue;
         b.x += b.vx * dt; b.y += b.vy * dt; b.rotation += b.angularVelocity * dt;
     }
 
@@ -631,9 +636,16 @@ FLASH_API int32_t get_physics_version() {
 }
 
 FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits) {
-    if (!world || world->activeCount >= world->maxBodies) return -1;
-    
-    int32_t id = world->activeCount++;
+    if (!world) return -1;
+
+    int32_t id;
+    if (world->bodyFreeCount > 0) {
+        id = world->bodyFreeList[--world->bodyFreeCount];
+    } else {
+        if (world->activeCount >= world->maxBodies) return -1;
+        id = world->activeCount++;
+    }
+
     NativeBody& b = world->bodies[id];
     b.id = id;
     b.type = type;
@@ -670,8 +682,49 @@ FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, floa
     b.proxyId = tree_insert_leaf(world->tree, id, aabb);
     
     b.isAwake = 1;
+    b.alive = 1;
 
     return id;
+}
+
+FLASH_API void destroy_body(PhysicsWorld* world, int32_t bodyId) {
+    if (!world || bodyId < 0 || bodyId >= world->activeCount) return;
+    NativeBody& b = world->bodies[bodyId];
+    if (!b.alive) return; // guard against double release
+
+    // Out of the broadphase first: a leaf left behind would keep generating
+    // pairs, and a later body reusing the slot would insert a second one.
+    if (b.proxyId >= 0) {
+        tree_remove_leaf(world->tree, b.proxyId);
+        b.proxyId = -1;
+    }
+
+    // Joints holding this body would otherwise be re-pointed at whatever body
+    // recycles the slot, silently attaching to the wrong thing.
+    for (int i = world->activeBoxJoints - 1; i >= 0; --i) {
+        const Joint& j = world->boxJoints[i];
+        if ((int32_t)j.bodyA == bodyId || (int32_t)j.bodyB == bodyId) {
+            destroy_joint(world, i);
+        }
+    }
+
+    // Warm-start impulses are keyed by body pair. A recycled slot inheriting
+    // them would be shoved apart on its first frame by a contact that belonged
+    // to a body that no longer exists.
+    if (world->warmStartCache) {
+        ImpulseCache& cache = *static_cast<ImpulseCache*>(world->warmStartCache);
+        for (auto it = cache.begin(); it != cache.end();) {
+            const uint32_t lo = (uint32_t)(it->first >> 40);
+            const uint32_t hi = (uint32_t)((it->first >> 8) & 0xFFFFFF);
+            it = (lo == (uint32_t)bodyId || hi == (uint32_t)bodyId) ? cache.erase(it) : ++it;
+        }
+    }
+
+    b.alive = 0;
+    b.type = STATIC;      // belt and braces: nothing integrates a dead slot
+    b.isAwake = 0;
+    b.collision_count = 0;
+    world->bodyFreeList[world->bodyFreeCount++] = bodyId;
 }
 
 FLASH_API int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness) {
@@ -892,6 +945,7 @@ void step_soft_body(PhysicsWorld* world, float dt) {
             const uint32_t bodyId = candidates[cIdx];
             if ((int)bodyId >= world->activeCount) continue;
             NativeBody& b = world->bodies[bodyId];
+            if (!b.alive) continue;
 
             // Constant for the whole point loop. This used to be two trig calls
             // per point per body.
@@ -1136,6 +1190,7 @@ FLASH_API RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, f
         const uint32_t bodyId = candidates[c];
         if ((int)bodyId >= world->activeCount) continue;
         NativeBody& b = world->bodies[bodyId];
+        if (!b.alive) continue;
 
         float hitFraction = 1.0f;
         float nx = 0, ny = 0;
