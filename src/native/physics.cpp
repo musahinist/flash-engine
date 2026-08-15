@@ -872,13 +872,43 @@ void step_soft_body(PhysicsWorld* world, float dt) {
         }
 
         // 4. Collision with Rigid Bodies
-        for (int bIdx = 0; bIdx < world->activeCount; bIdx++) {
-            NativeBody& b = world->bodies[bIdx];
+        //
+        // Broad phase first: this tested every soft-body point against every
+        // rigid body in the world, O(points x bodies) per soft body per frame,
+        // with a body's cos/sin recomputed inside the point loop. The soft
+        // body's own bounds narrow that to the handful of bodies it could
+        // actually be touching.
+        AABB sbBounds;
+        sbBounds.minX = sbBounds.maxX = sb.points[0].x;
+        sbBounds.minY = sbBounds.maxY = sb.points[0].y;
+        for (int pIdx = 1; pIdx < sb.pointCount; pIdx++) {
+            sbBounds.minX = std::min(sbBounds.minX, sb.points[pIdx].x);
+            sbBounds.minY = std::min(sbBounds.minY, sb.points[pIdx].y);
+            sbBounds.maxX = std::max(sbBounds.maxX, sb.points[pIdx].x);
+            sbBounds.maxY = std::max(sbBounds.maxY, sb.points[pIdx].y);
+        }
+        // The point radius the tests below add, so a point that is about to
+        // touch is not excluded by the broad phase.
+        sbBounds.fatten(2.0f);
 
-            if (b.type == 0 && b.shapeType == 1 && b.width > 1000) {
-                // Optimization: For huge static ground, use simple plane check if possible?
-                // Actually, let's just do generic checks.
-            }
+        const int kMaxSoftBodyCandidates = 128;
+        uint32_t candidates[kMaxSoftBodyCandidates];
+        const int candidateCount =
+            tree_query_aabb(world->tree, sbBounds, candidates, kMaxSoftBodyCandidates);
+
+        for (int cIdx = 0; cIdx < candidateCount; cIdx++) {
+            const uint32_t bodyId = candidates[cIdx];
+            if ((int)bodyId >= world->activeCount) continue;
+            NativeBody& b = world->bodies[bodyId];
+
+            // Constant for the whole point loop. This used to be two trig calls
+            // per point per body.
+            const float c = std::cos(-b.rotation);
+            const float s = std::sin(-b.rotation);
+            const float c_rot = c;   // cos(-r) == cos(r)
+            const float s_rot = -s;  // sin(-r) == -sin(r)
+            const float hw = b.width * 0.5f;
+            const float hh = b.height * 0.5f;
 
             for (int pIdx = 0; pIdx < sb.pointCount; pIdx++) {
                 SoftBodyPoint& p = sb.points[pIdx];
@@ -908,18 +938,12 @@ void step_soft_body(PhysicsWorld* world, float dt) {
                     }
                 } else if (b.shapeType == 1) { // Box
                     // Transform point to box local space
-                    float c = std::cos(-b.rotation);
-                    float s = std::sin(-b.rotation);
-                    
                     float dx = p.x - b.x;
                     float dy = p.y - b.y;
-                    
+
                     float localX = dx * c - dy * s;
                     float localY = dx * s + dy * c;
-                    
-                    float hw = b.width * 0.5f;
-                    float hh = b.height * 0.5f;
-                    
+
                     // AABB Check in local space (with small point radius)
                     float pointRadius = 2.0f;
                     if (localX > -hw - pointRadius && localX < hw + pointRadius &&
@@ -933,30 +957,16 @@ void step_soft_body(PhysicsWorld* world, float dt) {
                         
                         float minPen = std::min({dLeft, dRight, dBottom, dTop});
                         
+                        // Push the point out through whichever expanded wall
+                        // it is nearest: each d* above is the distance from
+                        // that wall, so the smallest names the shortest way
+                        // out, and the normal points away from the box.
                         float nLocalX = 0, nLocalY = 0;
-                        if (minPen == dLeft) nLocalX = -1; // Push left? No, towards positive. Wait. 
-                        // localX is > left edge. value is positive. so push RIGHT? No. 
-                        // If inside, we want to push towards the CLOSEST OUTSIDE.
-                        
-                        if (minPen == dLeft) nLocalX = -1; // Wrong sign logic often. Let's think.
-                        // inside box X = 0. left wall at -10. dist = 10. we want to push LEFT to get out? No, that's far.
-                        // We want to push to closest edge.
-                        
-                        if (minPen == dLeft) nLocalX = -1; // Actually, if we are just barely inside left wall, localX is approx -hw.
-                        // We want to push to -hw. So direction is NEGATIVE X?
-                        
-                        // Let's standardise:
-                        // Penetration is ALWAYS positive depth.
-                        // Normal points FROM box TO point.
-                        
-                        if (minPen == dLeft) nLocalX = -1; 
+                        if (minPen == dLeft) nLocalX = -1;
                         else if (minPen == dRight) nLocalX = 1;
                         else if (minPen == dBottom) nLocalY = -1;
                         else if (minPen == dTop) nLocalY = 1;
-                        
-                        // Transform normal back to world
-                        float c_rot = std::cos(b.rotation);
-                        float s_rot = std::sin(b.rotation);
+
                         
                         float worldNx = nLocalX * c_rot - nLocalY * s_rot;
                         float worldNy = nLocalX * s_rot + nLocalY * c_rot;
@@ -1115,10 +1125,26 @@ FLASH_API RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, f
     
     float dx = endX - startX;
     float dy = endY - startY;
-    
-    for (int i = 0; i < world->activeCount; ++i) {
-        NativeBody& b = world->bodies[i];
-        
+
+    // Broad phase first. This walked every body in the world, which is what
+    // the tree exists to avoid — and a raycast is exactly the query an AABB
+    // tree is best at, since a segment prunes most of the hierarchy at the
+    // first couple of levels.
+    //
+    // Candidates are bounded by the scratch buffer. A segment that genuinely
+    // crosses more bodies than fit will test the first `kMaxRayCandidates` of
+    // them; that is a broad-phase clamp, so the exact test below still decides
+    // which is nearest among those.
+    const int kMaxRayCandidates = 256;
+    uint32_t candidates[kMaxRayCandidates];
+    const int candidateCount =
+        tree_query_ray(world->tree, startX, startY, endX, endY, candidates, kMaxRayCandidates);
+
+    for (int c = 0; c < candidateCount; ++c) {
+        const uint32_t bodyId = candidates[c];
+        if ((int)bodyId >= world->activeCount) continue;
+        NativeBody& b = world->bodies[bodyId];
+
         float hitFraction = 1.0f;
         float nx = 0, ny = 0;
         bool hit = false;

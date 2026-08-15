@@ -264,6 +264,67 @@ void main() {
       report('paint path: 1000 boxes, ${engine.renderNodes.length} in render list', engine);
     });
 
+    test('spatial queries: raycast and soft body', () {
+      // Both used to walk every body in the world. The measurement that matters
+      // is how the cost grows with body count, not the absolute number.
+      // ignore: avoid_print
+      print('\n=== spatial queries ===');
+      // ignore: avoid_print
+      print('  ${'bodies'.padLeft(8)}${'raycast us'.padLeft(13)}${'softbody ms'.padLeft(13)}');
+
+      for (final bodyCount in [50, 200, 800, 2000]) {
+        final physics = FPhysicsSystem();
+        // Spread across a wide area so a ray crosses only a few of them.
+        final side = sqrt(bodyCount).ceil();
+        for (int i = 0; i < bodyCount; i++) {
+          FPhysicsSystem.createBody(
+            // Boxes, not circles: the soft-body contact test only does trig on
+            // the box branch, so a circle crowd would not exercise the hoist.
+            physics.world, 0, 1,
+            (i % side) * 120.0 - 3000, (i ~/ side) * 120.0 + 400,
+            40, 40, 0.3, 0x0001, 0xFFFF,
+          );
+        }
+        FPhysicsSystem.createBody(
+            physics.world, 0, 1, 0, -300, 4000, 40, 0, 0x0001, 0xFFFF);
+
+        // Raycast across the whole scene.
+        for (int i = 0; i < 200; i++) {
+          FPhysicsSystem.rayCast(physics.world, -3500, 0, 3500, 0);
+        }
+        final rayWatch = Stopwatch()..start();
+        const rayIterations = 5000;
+        for (int i = 0; i < rayIterations; i++) {
+          FPhysicsSystem.rayCast(physics.world, -3500, 0, 3500, 0);
+        }
+        rayWatch.stop();
+
+        // A soft body resting on the ground, with every one of those bodies
+        // elsewhere in the world.
+        final pts = List.generate(16, (i) {
+          final a = i * 2 * pi / 16;
+          return Offset(cos(a) * 50, -200 + sin(a) * 50);
+        });
+        FPhysicsSystem.createSoftBody(physics.world, pts);
+        for (int i = 0; i < 30; i++) {
+          physics.update(1 / 60);
+        }
+        final softWatch = Stopwatch()..start();
+        const softFrames = 300;
+        for (int i = 0; i < softFrames; i++) {
+          physics.update(1 / 60);
+        }
+        softWatch.stop();
+
+        // ignore: avoid_print
+        print('  ${bodyCount.toString().padLeft(8)}'
+            '${(rayWatch.elapsedMicroseconds / rayIterations).toStringAsFixed(2).padLeft(13)}'
+            '${(softWatch.elapsedMicroseconds / softFrames / 1000).toStringAsFixed(3).padLeft(13)}');
+
+        physics.dispose();
+      }
+    });
+
     test('serial vs parallel crossover', () {
         // ignore: avoid_print
       print('\n  ${'count'.padLeft(8)}${'serial'.padLeft(10)}${'parallel'.padLeft(10)}${'ratio'.padLeft(9)}');

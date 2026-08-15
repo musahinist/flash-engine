@@ -73,6 +73,18 @@ int32_t tree_update_leaf(DynamicTree* tree, int32_t proxyId, const AABB& aabb);
 // Query tree for potential collision pairs against all bodies
 int query_tree_pairs(DynamicTree* tree, BroadphasePair* outPairs, int maxPairs);
 
+// Bodies whose fat AABB overlaps `box`. Returns how many ids were written,
+// clamped to maxResults.
+//
+// The tree existed only to build the pair list; everything else that needed a
+// spatial lookup — raycasts, soft body contacts — walked all bodies instead.
+int tree_query_aabb(DynamicTree* tree, const AABB& box, uint32_t* outBodyIds, int maxResults);
+
+// Bodies whose fat AABB the segment (x0,y0)->(x1,y1) passes through. Broad
+// phase only: the caller still runs the exact shape test on each candidate.
+int tree_query_ray(DynamicTree* tree, float x0, float y0, float x1, float y1,
+                   uint32_t* outBodyIds, int maxResults);
+
 // Helper: Calculate AABB for a body
 AABB calculate_body_aabb(const struct NativeBody& body);
 

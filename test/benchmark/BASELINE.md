@@ -293,6 +293,66 @@ identical input — that is what the table above is, and what
 `test/particle_parallel_test.dart` uses to assert the two produce byte-identical
 vertex and colour buffers with visibility deliberately uneven across chunks.
 
+---
+
+# Spatial queries
+
+The broadphase tree was built every frame and used for exactly one thing:
+producing the collision pair list. Everything else that needed a spatial lookup
+walked all bodies.
+
+Measured by reverting `physics.cpp`, `broadphase.cpp` and `broadphase.h` and
+re-running. Crowd bodies are rotated boxes, because the soft-body contact test
+only does trigonometry on the box branch — a crowd of circles would not exercise
+the change.
+
+## `ray_cast`
+
+| bodies | before | after | |
+|---|---|---|---|
+| 50 | 0.40 us | 0.07 us | 5.7x |
+| 200 | 1.23 us | 0.04 us | 31x |
+| 800 | 4.93 us | 0.04 us | 123x |
+| 2,000 | 12.78 us | 0.04 us | **320x** |
+
+The ratio is not the point; the shape of the column is. Before, cost grew
+linearly with world size — every raycast ran an exact circle or oriented-box
+intersection against every body in the world. After, it is flat, because a
+segment prunes an AABB hierarchy at the first couple of levels and the exact
+test only runs on the leaves it actually crosses.
+
+A raycast is the query an AABB tree is best at, and the tree was already there,
+maintained every frame, unused for this.
+
+## Soft body against rigid body
+
+| bodies | before | after | |
+|---|---|---|---|
+| 50 | 0.015 ms | 0.013 ms | −13% |
+| 200 | 0.035 ms | 0.030 ms | −14% |
+| 800 | 0.134 ms | 0.111 ms | −17% |
+| 2,000 | 0.370 ms | 0.305 ms | −18% |
+
+Smaller, and worth being clear about why: this column is a whole
+`physics.update` — one soft body against N rigid bodies — and it is dominated by
+the rigid solver stepping those N bodies, not by soft-body contact. The
+soft-body loop itself went from O(points x all bodies) with two trig calls per
+point per body, to O(points x nearby bodies) with the trig hoisted to once per
+body. That is a large change to a small share of the frame.
+
+Also removed here: an empty `if (b.type == 0 && ...) { }` block, and a run of
+four identical `if (minPen == dLeft) nLocalX = -1;` statements interleaved with
+the author's thinking-out-loud comments. The final assignment chain was correct;
+the repetitions were debris.
+
+Covered by `test/raycast_test.dart` (12 tests) and `test/soft_body_test.dart`
+(6). The failure mode of a wrong broadphase is silent — a raycast that misses,
+a soft body that sinks through geometry — so these check the nearest hit is
+still nearest, that near-misses stay misses, that an axis-parallel ray still
+resolves (the slab test divides by the ray direction, and a zero component is
+where a naive reciprocal produces NaN), and that a crowd of distant bodies does
+not change a soft body's resting position.
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles

@@ -464,4 +464,79 @@ AABB calculate_body_aabb(const NativeBody& body) {
     return aabb;
 }
 
+int tree_query_aabb(DynamicTree* tree, const AABB& box, uint32_t* outBodyIds, int maxResults) {
+    if (!tree || !outBodyIds || maxResults <= 0 || tree->root == -1) return 0;
+
+    int count = 0;
+    // Depth is O(log n) after AVL balancing; 64 covers far more nodes than the
+    // pool can hold, and a fixed stack keeps this allocation-free so it can be
+    // called per soft-body point without churning the heap.
+    int32_t stack[64];
+    int top = 0;
+    stack[top++] = tree->root;
+
+    while (top > 0) {
+        const int32_t curr = stack[--top];
+        const TreeNode& node = tree->nodes[curr];
+        if (!node.aabb.overlaps(box)) continue;
+
+        if (node.isLeaf()) {
+            outBodyIds[count++] = node.bodyId;
+            if (count >= maxResults) return count;
+        } else if (top + 2 <= (int)(sizeof(stack) / sizeof(stack[0]))) {
+            stack[top++] = node.left;
+            stack[top++] = node.right;
+        }
+    }
+    return count;
+}
+
+int tree_query_ray(DynamicTree* tree, float x0, float y0, float x1, float y1,
+                   uint32_t* outBodyIds, int maxResults) {
+    if (!tree || !outBodyIds || maxResults <= 0 || tree->root == -1) return 0;
+
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+
+    // Slab test, reciprocal precomputed. A zero component gives an infinite
+    // reciprocal, and the IEEE comparisons below then behave correctly for a
+    // ray running exactly parallel to that axis — except when the origin sits
+    // on the slab boundary, where 0 * inf is NaN. Nudging the reciprocal to a
+    // very large finite value avoids that without a branch in the loop.
+    const float invDx = (dx != 0.0f) ? 1.0f / dx : 1e30f;
+    const float invDy = (dy != 0.0f) ? 1.0f / dy : 1e30f;
+
+    int count = 0;
+    int32_t stack[64];
+    int top = 0;
+    stack[top++] = tree->root;
+
+    while (top > 0) {
+        const int32_t curr = stack[--top];
+        const TreeNode& node = tree->nodes[curr];
+        const AABB& b = node.aabb;
+
+        const float tx1 = (b.minX - x0) * invDx;
+        const float tx2 = (b.maxX - x0) * invDx;
+        const float ty1 = (b.minY - y0) * invDy;
+        const float ty2 = (b.maxY - y0) * invDy;
+
+        float tMin = std::max(std::min(tx1, tx2), std::min(ty1, ty2));
+        float tMax = std::min(std::max(tx1, tx2), std::max(ty1, ty2));
+
+        // The segment is bounded: reject anything the ray only reaches past
+        // its end point, or entirely behind its start.
+        if (tMax < 0.0f || tMin > tMax || tMin > 1.0f) continue;
+
+        if (node.isLeaf()) {
+            outBodyIds[count++] = node.bodyId;
+            if (count >= maxResults) return count;
+        } else if (top + 2 <= (int)(sizeof(stack) / sizeof(stack[0]))) {
+            stack[top++] = node.left;
+            stack[top++] = node.right;
+        }
+    }
+    return count;
+}
+
 }
