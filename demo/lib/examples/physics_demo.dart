@@ -21,10 +21,10 @@ class PhysicsDemoExample extends StatefulWidget {
 }
 
 class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
-  /// Bodies are never destroyed by the native world — `create_body` hands out
-  /// slots from a fixed pool and there is no free list — so an unbounded
-  /// spawner eventually exhausts it and every later body silently fails to
-  /// appear. The oldest is retired once the board is full.
+  /// A cap so the board stays readable and the solver stays inside a frame;
+  /// the oldest body is retired once it is reached. Bodies release their native
+  /// slot when their node leaves the tree, so this is about how much is worth
+  /// simulating, not about running the pool dry.
   static const int _maxBodies = 120;
 
   final List<_BodyData> _bodies = [];
@@ -86,7 +86,7 @@ class _PhysicsDemoExampleState extends State<PhysicsDemoExample> {
       readouts: [
         DemoStat(label: 'Bodies', value: '${_bodies.length} / $_maxBodies'),
       ],
-      hint: 'Bodies retire oldest-first at $_maxBodies; the native pool has no free list.',
+      hint: 'Tap "Drop one", or leave it dropping. Oldest retires past $_maxBodies.',
       scene: FView(
         // The scene only changes when a body is added or removed, so there is
         // no reason to rebuild the whole widget tree every frame.
