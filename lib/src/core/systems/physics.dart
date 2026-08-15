@@ -62,10 +62,6 @@ class FPhysicsSystem {
     native.destroyPhysicsWorld(world);
   }
 
-  void setWarmStarting(bool enable) {
-    // native.setWarmStarting(world, enable ? 1 : 0);
-  }
-
   // --- ID-Based API Wrappers (Static for strict separation) ---
 
   static BodyId createBody(

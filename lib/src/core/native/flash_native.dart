@@ -4,7 +4,7 @@ import 'flash_native_bindings.dart' as bindings;
 ///
 /// Mirrors `FLASH_ABI_VERSION` in `src/native/physics.h`. Bump both together
 /// whenever an exported struct layout or signature changes.
-const int kFlashAbiVersion = 2;
+const int kFlashAbiVersion = 3;
 
 /// Thrown when a feature that genuinely requires the native core is used on a
 /// build where that core is unavailable.

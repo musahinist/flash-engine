@@ -7,7 +7,7 @@
 
 // Bumped whenever the exported C ABI changes (struct layout, signatures).
 // Dart mirrors this in FlashNative and checks it at load time.
-#define FLASH_ABI_VERSION 2
+#define FLASH_ABI_VERSION 3
 
 extern "C" {
 
@@ -92,24 +92,12 @@ struct NativeBody {
     float restitution;
     float friction;
     float width, height, radius;
-    int isSensor;        // Set by create_body; the solver does not act on it yet
-    int isBullet;        // Reserved for CCD, which is not implemented
     int collision_count;
     float sleepTime;     // Time body has been at rest
     uint32_t categoryBits;
     uint32_t maskBits;
     int32_t proxyId;
     int isAwake;
-    int islandId;        // Reserved for island/sleep grouping, not implemented
-};
-
-// Manifold for persistent contact tracking (Warm Starting)
-struct ContactManifold {
-    uint32_t bodyA;
-    uint32_t bodyB;
-    float normalImpulse;
-    float tangentImpulse;
-    int active; // Using int for stable FFI alignment
 };
 
 struct PhysicsWorld {
@@ -128,10 +116,6 @@ struct PhysicsWorld {
     float maxLinearVelocity;     // Maximum linear velocity (for stability)
     
     // Internal solver state (keep at end to avoid shifting offsets for Dart FFI)
-    ContactManifold* manifolds;
-    int maxManifolds;
-    int activeManifolds;
-    
     ContactConstraint* constraints;
     int maxConstraints;
     int activeConstraints;

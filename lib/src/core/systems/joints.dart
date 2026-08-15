@@ -26,6 +26,24 @@ abstract class FJoint {
   }
 
   bool get isCreated => _jointId != null && _jointId!.isValid;
+
+  /// Records the result of `create_joint`, throwing if the world refused it.
+  ///
+  /// `create_joint` returns -1 when the world's joint pool is full — a fixed
+  /// 200 — and that is reachable in a scene that builds joints at runtime. Only
+  /// one of the four joint types used to check at all, and it printed to stdout
+  /// rather than surfacing anything a caller could act on; the other three
+  /// stored the -1 and carried on, so the joint simply did not exist and
+  /// nothing said so. Physics is a tier 2 feature: it fails loudly.
+  void _store(JointId id, String kind) {
+    if (!id.isValid) {
+      throw StateError(
+        'Failed to create a $kind joint: the physics world would not accept it. '
+        'The most likely cause is exhausting the joint pool, which holds 200.',
+      );
+    }
+    _jointId = id;
+  }
 }
 
 /// Distance joint - maintains a fixed or spring distance between two bodies
@@ -77,13 +95,7 @@ class FDistanceJointStructure extends FJoint {
       def.ref.frequency = frequency;
       def.ref.dampingRatio = dampingRatio;
 
-      _jointId = native.createJoint(world, def);
-
-      if (_jointId!.isValid) {
-        print('✅ Distance joint created: ID=$_jointId, length=${length.toStringAsFixed(1)}');
-      } else {
-        print('❌ Failed to create distance joint');
-      }
+      _store(native.createJoint(world, def), 'distance');
     } finally {
       calloc.free(def);
     }
@@ -131,8 +143,7 @@ class FRevoluteJointStructure extends FJoint {
       def.ref.lowerAngle = lowerAngle;
       def.ref.upperAngle = upperAngle;
 
-      _jointId = native.createJoint(world, def);
-      print('🔄 Revolute Joint Created: ID=$_jointId');
+      _store(native.createJoint(world, def), 'revolute');
     } finally {
       calloc.free(def);
     }
@@ -179,8 +190,7 @@ class FPrismaticJointStructure extends FJoint {
       def.ref.motorSpeed = motorSpeed;
       def.ref.maxMotorForce = maxMotorForce;
 
-      _jointId = native.createJoint(world, def);
-      print('📏 Prismatic Joint Created: ID=$_jointId');
+      _store(native.createJoint(world, def), 'prismatic');
     } finally {
       calloc.free(def);
     }
@@ -215,8 +225,7 @@ class FWeldJointStructure extends FJoint {
       def.ref.stiffness = stiffness;
       def.ref.damping = damping;
 
-      _jointId = native.createJoint(world, def);
-      print('🔗 Weld Joint Created: ID=$_jointId');
+      _store(native.createJoint(world, def), 'weld');
     } finally {
       calloc.free(def);
     }

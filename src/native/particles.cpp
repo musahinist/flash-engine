@@ -30,18 +30,6 @@ FLASH_API void update_particles(ParticleEmitter* emitter, float dt) {
     }
 }
 
-FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color) {
-    if (!emitter || !emitter->particles || emitter->activeCount >= emitter->maxParticles) return;
-
-    NativeParticle& p = emitter->particles[emitter->activeCount++];
-    p.x = x; p.y = y; p.z = z;
-    p.vx = vx; p.vy = vy; p.vz = vz;
-    p.life = 1.0f;
-    p.maxLife = maxLife;
-    p.size = size;
-    p.color = color;
-}
-
 // xorshift32: cheap, deterministic, and good enough for scattering particles.
 // The alternative was calling back into Dart's Random per particle.
 static inline uint32_t next_random(uint32_t& state) {

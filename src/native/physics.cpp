@@ -58,10 +58,6 @@ FLASH_API PhysicsWorld* create_physics_world(int maxBodies) {
     world->maxBodies = maxBodies;
     world->activeCount = 0;
     
-    world->maxManifolds = maxBodies * 2; 
-    world->manifolds = (ContactManifold*)calloc(world->maxManifolds, sizeof(ContactManifold));
-    world->activeManifolds = 0;
-    
     // Initialize contact constraints
     world->maxConstraints = maxBodies * 4;
     world->constraints = (ContactConstraint*)calloc(world->maxConstraints, sizeof(ContactConstraint));
@@ -106,7 +102,6 @@ FLASH_API void destroy_physics_world(PhysicsWorld* world) {
     // create_soft_body, so it must be released with free(). Mixing the
     // malloc family with delete is undefined behaviour.
     free(world->bodies);
-    free(world->manifolds);
     free(world->constraints);
     destroy_dynamic_tree(world->tree);
     free(world->boxJoints);
@@ -665,8 +660,6 @@ FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, floa
     
     b.restitution = 0.2f;
     b.friction = 0.4f;
-    b.isSensor = false;
-    b.isBullet = false;  // Default: no continuous collision
     b.sleepTime = 0.0f;  // Initialize sleep timer
     b.collision_count = 0;
     b.categoryBits = categoryBits;
@@ -677,7 +670,6 @@ FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, floa
     b.proxyId = tree_insert_leaf(world->tree, id, aabb);
     
     b.isAwake = 1;
-    b.islandId = -1;
 
     return id;
 }

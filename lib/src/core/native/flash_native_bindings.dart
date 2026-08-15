@@ -111,12 +111,6 @@ final class PhysicsWorld extends Struct {
   external double maxLinearVelocity;
 
   // Internal solver state (Must match order in physics.h)
-  external Pointer<Void> manifolds;
-  @Int32()
-  external int maxManifolds;
-  @Int32()
-  external int activeManifolds;
-
   external Pointer<Void> constraints;
   @Int32()
   external int maxConstraints;
@@ -174,10 +168,6 @@ final class NativeBody extends Struct {
   @Float()
   external double radius;
   @Int32()
-  external int isSensor;
-  @Int32()
-  external int isBullet; // Enable continuous collision detection
-  @Int32()
   external int collisionCount;
   @Float()
   external double sleepTime; // Time body has been at rest
@@ -189,8 +179,6 @@ final class NativeBody extends Struct {
   external int proxyId;
   @Int32()
   external int isAwake;
-  @Int32()
-  external int islandId;
 }
 
 final class ParticleEmitter extends Struct {
@@ -350,29 +338,11 @@ external int getPhysicsVersion();
 @Native<Void Function(Pointer<ParticleEmitter>, Float)>(symbol: 'update_particles', isLeaf: true)
 external void updateParticles(Pointer<ParticleEmitter> emitter, double dt);
 
-@Native<Void Function(Pointer<ParticleEmitter>, Float, Float, Float, Float, Float, Float, Float, Float, Uint32)>(
-  symbol: 'spawn_particle',
-  isLeaf: true,
-)
-external void spawnParticle(
-  Pointer<ParticleEmitter> emitter,
-  double x,
-  double y,
-  double z,
-  double vx,
-  double vy,
-  double vz,
-  double maxLife,
-  double size,
-  int color,
-);
-
 /// Spawns a whole burst in one call.
 ///
-/// The per-particle [spawnParticle] path cost one FFI crossing and several
-/// Dart allocations per particle — at the 1M-particle target that was ~500k
-/// calls and ~2M allocations a second, which no amount of native speed could
-/// absorb.
+/// The per-particle path this replaced cost one FFI crossing and several Dart
+/// allocations per particle — at the 1M-particle target that was ~500k calls
+/// and ~2M allocations a second, which no amount of native speed could absorb.
 @Native<Int32 Function(Pointer<ParticleEmitter>, Pointer<EmitParams>, Int32, Uint32)>(
   symbol: 'emit_particles',
   isLeaf: true,

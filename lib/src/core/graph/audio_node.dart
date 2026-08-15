@@ -1,13 +1,10 @@
 import '../systems/audio.dart';
 import '../graph/node.dart';
 
-// We need a way to access the AudioSystem.
-// Usually nodes don't access singletons directly, but for now we might need to
-// rely on the Widget layer to inject it, OR Engine provides it.
-// Assuming we pass Engine or AudioSystem to update?
-// FlashNode.update(dt) doesn't pass context.
-// Ideally, the Node should be registered with the AudioSystem.
-
+/// A sound attached to a point in the scene graph.
+///
+/// The node does not reach for the audio system itself; [initialize] is called
+/// by the widget layer, which has the engine and therefore the system.
 class FAudioNode extends FNode {
   final String assetPath;
   final bool autoplay;
@@ -34,10 +31,6 @@ class FAudioNode extends FNode {
     this.maxDistance = 2000.0,
   });
 
-  // Called when node is added to scene.. or customized lifecycle?
-  // Since we don't have "onEnterTree" yet in generic FlashNode,
-  // we rely on declarative widget to trigger init, OR we add lazy init in update.
-
   Future<void> initialize(FAudioSystem system) async {
     if (_source != null) return; // Already initialized
 
@@ -55,23 +48,22 @@ class FAudioNode extends FNode {
     // Prune invalid handles
     _handles.removeWhere((h) => !_system!.isValidHandle(h));
 
-    try {
-      final handle = await _system!.play(
-        _source!,
-        loop: loop,
-        volume: volume,
-        position: is3D ? worldPosition : null,
-        paused: false,
-      );
+    // Errors are not caught here. Playback failing used to be swallowed with a
+    // print to stdout, which a library has no business doing and which no
+    // caller could react to. It now travels back through this Future, where
+    // Flutter's error reporting picks it up with a stack trace.
+    final handle = await _system!.play(
+      _source!,
+      loop: loop,
+      volume: volume,
+      position: is3D ? worldPosition : null,
+      paused: false,
+    );
 
-      _handles.add(handle);
+    _handles.add(handle);
 
-      // Initial 3D update
-      if (is3D) {
-        _system!.setSourceAttributes(handle, worldPosition, minDistance, maxDistance);
-      }
-    } catch (e) {
-      print('Error playing sound: $e');
+    if (is3D) {
+      _system!.setSourceAttributes(handle, worldPosition, minDistance, maxDistance);
     }
   }
 

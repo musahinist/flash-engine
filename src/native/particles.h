@@ -43,7 +43,6 @@ struct EmitParams {
 
 // Functions exported to Dart via FFI
 FLASH_API void update_particles(ParticleEmitter* emitter, float dt);
-FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color);
 
 /// Spawns up to [count] particles in one call. Returns how many were created
 /// (fewer if the emitter filled up). [seed] advances the internal RNG so the
