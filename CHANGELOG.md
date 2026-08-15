@@ -80,6 +80,64 @@ demos are migrated in the same commit.
   offsets), graceful degradation, process modes, camera behaviour, grid maths
   and the widget layer.
 
+### Performance
+
+Measured throughout, against a baseline recorded first. `test/benchmark/` holds
+the harness and `test/benchmark/BASELINE.md` the numbers, including the changes
+that measured as nothing and the one estimate that ranked two items the wrong
+way round.
+
+- Added `FProfiler` and `FEngine.debugTick`, so frame cost is attributable per
+  section. The only previous indicator was `FEngine.fps`, which measures tick
+  frequency — a frame using 90% of its budget looked identical to one using 10%.
+- The world matrix version gate compared the scene-wide `totalUpdates`, which
+  increments every frame regardless, so a stationary node re-read sixteen floats
+  across the FFI boundary every frame. It now gates on the node's own
+  `worldVersion`, which C++ only bumps when the matrix actually changes. Deep
+  hierarchy p95 1.865 → 1.109 ms.
+- Particle emission is one FFI call per burst rather than per particle, with the
+  randomisation and spread rotation done natively. The old path cost roughly
+  500,000 crossings and 2,000,000 Dart allocations a second at the engine's
+  stated 1M-particle target. 100k particles: 0.303 → 0.109 ms.
+- Box narrow phase builds each body's frame once instead of calling `rotate` —
+  and therefore `cos` and `sin` — per corner per axis: 64 trig calls per pair
+  down to 4. The position solver reuses the velocity phase's contact anchors
+  instead of re-running the full SAT test in every iteration.
+- The particle vertex builder hoisted a per-shape constant out of its
+  per-particle loop, halving its cost, and runs on a persistent thread pool. The
+  parallel path previously constructed `std::thread`s per chunk per pass per
+  frame, so its threshold sat at 100,000 particles and never engaged; it is now
+  4,096, measured. 1M particles: 5.83 → 2.13 ms.
+- `ray_cast` uses the broadphase tree instead of testing every body in the
+  world. Cost no longer grows with world size: 12.78 → 0.04 us at 2,000 bodies.
+  Soft body contacts do the same, and hoist the per-body trig out of the point
+  loop.
+- Frustum culling no longer allocates a `Matrix4`, a `List` and eight `Vector4`s
+  per bounded node per frame; camera matrices are cached for the frame rather
+  than recomputing a general 4x4 inverse several times; `FCircle`, `FTriangle`
+  and `FSphere` cache their `Paint`, `Path` and gradient instead of rebuilding
+  them every frame, and gained the `bounds` that means they are culled at all.
+- Batched the remaining per-item crossings: soft body point reads, body
+  positions, the particle camera matrix and gravity writes.
+
+### Removed
+
+No deprecation shims. These were all API that did nothing.
+
+- `FPhysicsSystem.setWarmStarting`, whose body was a commented-out line.
+- `spawn_particle`, superseded by the batched `emit_particles`.
+- `NativeBody.isSensor`, `isBullet` and `islandId`: written once at creation,
+  never read. The Dart mirror described `isBullet` as enabling continuous
+  collision detection, which does not exist.
+- `NativeNode.visible`: set beside `alive`, which already meant the same thing,
+  and read by neither — while Dart wrote scene visibility into the same field.
+- `PhysicsWorld.manifolds`: an array of `2 x maxBodies` allocated at
+  construction, freed at destruction, never touched in between.
+- Joint creation no longer prints to stdout. Three of the four joint types
+  ignored `create_joint`'s result entirely, so exceeding the 200-joint pool gave
+  a joint that silently did not exist; all four now throw.
+- `FAudioNode.play` no longer swallows exceptions behind a `print`.
+
 ## 0.0.1
 
 Initial version.
