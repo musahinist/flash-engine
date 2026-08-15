@@ -140,10 +140,6 @@ class FPhysicsSystem {
     return _getBodyPtr(world, bodyId).ref.friction;
   }
 
-  static void setBullet(WorldId world, BodyId bodyId, bool isBullet) {
-    _getBodyPtr(world, bodyId).ref.isBullet = isBullet ? 1 : 0;
-  }
-
   static double getRotation(WorldId world, BodyId bodyId) {
     return _getBodyPtr(world, bodyId).ref.rotation;
   }
@@ -352,11 +348,6 @@ class FPhysicsBody extends FNode {
 
   void applyTorque(double torque) {
     FPhysicsSystem.applyTorque(_world, bodyId, torque);
-  }
-
-  /// Enable continuous collision detection for fast-moving bodies
-  void setBullet(bool isBullet) {
-    FPhysicsSystem.setBullet(_world, bodyId, isBullet);
   }
 
   void _syncFromPhysics() {

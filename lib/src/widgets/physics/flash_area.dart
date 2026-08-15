@@ -8,6 +8,10 @@ import '../framework.dart';
 /// the other side, so the callbacks say "something entered" rather than
 /// identifying the counterpart. Naming the other body needs native support
 /// that does not exist yet.
+///
+/// It is also not a true sensor: the solver has no `isSensor` handling, so an
+/// area still pushes bodies out the way a static body would. Treat it as
+/// "a static body that tells you when it is touched".
 class FArea extends FNodeWidget {
   final int shapeType;
   final double width;

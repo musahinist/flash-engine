@@ -92,15 +92,15 @@ struct NativeBody {
     float restitution;
     float friction;
     float width, height, radius;
-    int isSensor;        // Using int for stable FFI alignment
-    int isBullet;        // Enable continuous collision detection
+    int isSensor;        // Set by create_body; the solver does not act on it yet
+    int isBullet;        // Reserved for CCD, which is not implemented
     int collision_count;
     float sleepTime;     // Time body has been at rest
     uint32_t categoryBits;
     uint32_t maskBits;
     int32_t proxyId;
     int isAwake;
-    int islandId;
+    int islandId;        // Reserved for island/sleep grouping, not implemented
 };
 
 // Manifold for persistent contact tracking (Warm Starting)
@@ -150,6 +150,11 @@ struct PhysicsWorld {
 
     // Internal cache for warm starting (C++ std::map<uint64_t, ...>*)
     void* warmStartCache;
+
+    // Broadphase pair scratch, owned for the life of the world. This was a
+    // new[]/delete[] pair on every step_physics call.
+    struct BroadphasePair* pairScratch;
+    int maxPairs;
 };
 
 FLASH_API PhysicsWorld* create_physics_world(int maxBodies);

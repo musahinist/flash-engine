@@ -87,6 +87,10 @@ FLASH_API PhysicsWorld* create_physics_world(int maxBodies) {
     // Create dynamic AABB tree for broadphase
     world->tree = create_dynamic_tree(maxBodies * 2);
     
+    // Broadphase pair scratch, sized once (was allocated every step).
+    world->maxPairs = maxBodies * 8;
+    world->pairScratch = (BroadphasePair*)calloc(world->maxPairs, sizeof(BroadphasePair));
+
     // Initialize Box2D joints
     world->maxBoxJoints = 200;
     world->boxJoints = (Joint*)calloc(world->maxBoxJoints, sizeof(Joint));
@@ -106,6 +110,7 @@ FLASH_API void destroy_physics_world(PhysicsWorld* world) {
     free(world->constraints);
     destroy_dynamic_tree(world->tree);
     free(world->boxJoints);
+    free(world->pairScratch);
 
     for (int i = 0; i < world->activeSoftBodies; ++i) {
         free(world->softBodies[i].points);
@@ -343,9 +348,8 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     }
 
     world->activeConstraints = 0;
-    const int maxPairs = world->maxBodies * 8; // Increased for complex scenes
-    BroadphasePair* pairs = new BroadphasePair[maxPairs];
-    int pairCount = query_tree_pairs(world->tree, pairs, maxPairs);
+    BroadphasePair* pairs = world->pairScratch;
+    int pairCount = query_tree_pairs(world->tree, pairs, world->maxPairs);
 
     Softness contactSoftness = makeSoftness(world->contactHertz, world->contactDampingRatio, dt);
 
@@ -402,7 +406,6 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
         }
         a.collision_count++; b.collision_count++;
     }
-    delete[] pairs;
 
     // Phase 2: Integrate Velocities & Apply Sleep
     for (int i = 0; i < world->activeCount; ++i) {
@@ -428,6 +431,19 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
         b.vy += (world->gravityY + b.forceY * b.inverseMass) * dt;
         b.angularVelocity += (b.torque * b.inverseInertia) * dt;
         
+        // Speed clamp. maxLinearVelocity was configured and never enforced;
+        // without it a body caught in a bad contact can accelerate without
+        // bound and tunnel through everything.
+        const float maxV = world->maxLinearVelocity;
+        if (maxV > 0.0f) {
+            const float speedSq = b.vx * b.vx + b.vy * b.vy;
+            if (speedSq > maxV * maxV) {
+                const float scale = maxV / std::sqrt(speedSq);
+                b.vx *= scale;
+                b.vy *= scale;
+            }
+        }
+
         // Damping for stability (Reduced from 0.99 to 0.999 to allow gravity to be snappy)
         b.vx *= 0.999f;
         b.vy *= 0.999f;

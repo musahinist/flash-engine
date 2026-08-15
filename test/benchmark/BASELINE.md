@@ -85,6 +85,19 @@ depends on. At 1M this is roughly 19.5 ms → 9.2 ms per fill — still far past
 
 Estimating from operation counts ranked these two the wrong way round.
 
+### Changes that measured as nothing
+
+Moving the broadphase pair buffer off the per-step heap and onto the world:
+0.687 → 0.703 ms (500 bodies), 0.316 → 0.319 ms (300 boxes). Both inside the
+noise. Two `new[]`/`delete[]` calls per frame are simply not significant next
+to the solver work they sit beside.
+
+Kept anyway — a per-frame heap allocation in a game loop is still the wrong
+shape, and on a memory-constrained device it fragments — but it is not a
+performance fix and is not counted as one. On the same evidence, replacing the
+`std::map` warm-start cache with a flat table was **dropped**: allocation is
+demonstrably not where the time goes here, so the risk is not worth it.
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles
