@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:ui' show Rect;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
@@ -185,7 +186,7 @@ class FEngine extends ChangeNotifier {
     }
 
     // Process the SceneTree (lifecycle updates)
-    profiler.section('tree', () => tree.process(dt));
+    profiler.section('tree', () => tree.process(dt, tickerCount));
 
     // Pausing the tree has to pause the simulation with it. These three used
     // to keep running regardless, so a "paused" game still had physics
@@ -206,6 +207,9 @@ class FEngine extends ChangeNotifier {
 
     // Use first visible registered camera (O(1) instead of O(n) tree traversal)
     activeCamera = _activeCameras.firstWhere((cam) => cam.visible, orElse: _ensureDefaultCamera);
+    // Cameras cache their projection/view/screen matrices for one frame; this
+    // is what tells them the frame moved on.
+    activeCamera!.frameStamp = tickerCount;
 
     // Update Audio Listener
     audio.updateListener(activeCamera!);
@@ -287,8 +291,10 @@ class FEngine extends ChangeNotifier {
       if (!node.visible) return;
 
       bool isVisible = true;
-      if (vpMatrix != null && node.bounds != null) {
-        isVisible = _isNodeVisible(node, vpMatrix);
+      if (vpMatrix != null) {
+        // bounds is a getter that builds a Rect; it was being called twice.
+        final bounds = node.bounds;
+        if (bounds != null) isVisible = _isNodeVisible(node, vpMatrix, bounds);
       }
 
       if (isVisible) {
@@ -310,43 +316,43 @@ class FEngine extends ChangeNotifier {
     }
   }
 
-  bool _isNodeVisible(FNode node, v.Matrix4 vpMatrix) {
-    final bounds = node.bounds!;
-    // MVP = VP * World
-    final mvp = vpMatrix * node.worldMatrix;
+  // Scratch for the culling test, reused across nodes and frames. This used to
+  // allocate a Matrix4, a List and eight Vector4s per bounded node per frame.
+  final v.Matrix4 _cullMvp = v.Matrix4.identity();
 
-    // Check 4 corners of the local bounds rect (at z=0)
-    final corners = [
-      v.Vector4(bounds.left, bounds.top, 0.0, 1.0),
-      v.Vector4(bounds.right, bounds.top, 0.0, 1.0),
-      v.Vector4(bounds.right, bounds.bottom, 0.0, 1.0),
-      v.Vector4(bounds.left, bounds.bottom, 0.0, 1.0),
-    ];
+  bool _isNodeVisible(FNode node, v.Matrix4 vpMatrix, Rect bounds) {
+    // MVP = VP * World, computed in place.
+    _cullMvp
+      ..setFrom(vpMatrix)
+      ..multiply(node.worldMatrix);
+    final m = _cullMvp.storage;
 
-    int outLeft = 0;
-    int outRight = 0;
-    int outTop = 0;
-    int outBottom = 0;
-    int outNear = 0;
-    int outFar = 0;
+    // Outcode per corner of the local bounds rect (at z = 0), ANDed together.
+    // If every corner is outside the same plane the node cannot be visible.
+    // Bailing out the moment the intersection empties also skips the rest.
+    var andMask = 0x3F;
+    for (int i = 0; i < 4; i++) {
+      final x = (i == 0 || i == 3) ? bounds.left : bounds.right;
+      final y = (i < 2) ? bounds.top : bounds.bottom;
 
-    for (final p in corners) {
-      final res = mvp * p;
-      // Check NDC bounds [-w, w]
-      if (res.x < -res.w) outLeft++;
-      if (res.x > res.w) outRight++;
-      if (res.y < -res.w) outTop++;
-      if (res.y > res.w) outBottom++;
-      // Z range depends on library, typically -w to w for GL-like
-      if (res.z < -res.w) outNear++;
-      if (res.z > res.w) outFar++;
+      final cx = m[0] * x + m[4] * y + m[12];
+      final cy = m[1] * x + m[5] * y + m[13];
+      final cz = m[2] * x + m[6] * y + m[14];
+      final cw = m[3] * x + m[7] * y + m[15];
+
+      var code = 0;
+      if (cx < -cw) code |= 1;
+      if (cx > cw) code |= 2;
+      if (cy < -cw) code |= 4;
+      if (cy > cw) code |= 8;
+      if (cz < -cw) code |= 16;
+      if (cz > cw) code |= 32;
+
+      andMask &= code;
+      if (andMask == 0) return true;
     }
-
-    // If all corners are outside of one plane, the object is culled
-    if (outLeft == 4 || outRight == 4 || outTop == 4 || outBottom == 4 || outNear == 4 || outFar == 4) {
-      return false;
-    }
-
-    return true;
+    return andMask == 0;
   }
+
+
 }

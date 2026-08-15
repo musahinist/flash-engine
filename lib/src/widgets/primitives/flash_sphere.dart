@@ -48,6 +48,15 @@ class _SphereNode extends FNode {
 
   _SphereNode({required this.radius, required this.color, this.texture});
 
+  // Cached shading. Keyed so it rebuilds when the light actually moves.
+  Paint? _shadedPaint;
+  Offset? _shaderLightOffset;
+  double? _shaderRadius;
+  Color? _shaderColor;
+
+  @override
+  Rect? get bounds => Rect.fromCircle(center: Offset.zero, radius: radius);
+
   @override
   void draw(Canvas canvas) {
     Offset lightOffset = Offset(-radius * 0.3, -radius * 0.3);
@@ -99,14 +108,26 @@ class _SphereNode extends FNode {
     }
 
     if (texture == null) {
-      final paint = Paint()
-        ..shader = ui.Gradient.radial(
-          lightOffset,
-          radius * 1.5,
-          [Colors.white, color, color.withValues(alpha: 0.8), Colors.black87],
-          [0.0, 0.4, 0.8, 1.0],
-        );
-      canvas.drawCircle(Offset.zero, radius, paint);
+      // The shader only depends on the light offset, radius and colour, none
+      // of which usually change between frames — but a fresh ui.Gradient was
+      // being built on every one. That is a native shader object per sphere
+      // per frame.
+      if (_shadedPaint == null ||
+          _shaderLightOffset != lightOffset ||
+          _shaderRadius != radius ||
+          _shaderColor != color) {
+        _shaderLightOffset = lightOffset;
+        _shaderRadius = radius;
+        _shaderColor = color;
+        _shadedPaint = Paint()
+          ..shader = ui.Gradient.radial(
+            lightOffset,
+            radius * 1.5,
+            [Colors.white, color, color.withValues(alpha: 0.8), Colors.black87],
+            [0.0, 0.4, 0.8, 1.0],
+          );
+      }
+      canvas.drawCircle(Offset.zero, radius, _shadedPaint!);
     } else {
       // Overlay shading for textured sphere
       final paint = Paint()

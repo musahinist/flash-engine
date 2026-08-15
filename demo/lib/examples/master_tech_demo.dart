@@ -65,8 +65,11 @@ class Coin extends FPhysicsBody {
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
+    // process(), not update(): update is the pump that evaluates ProcessMode
+    // and drives children. Overriding it means the node keeps working even
+    // when it is disabled.
+    super.process(dt);
     _aliveTime += dt;
   }
 }

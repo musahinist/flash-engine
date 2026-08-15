@@ -170,27 +170,77 @@ class FCameraNode extends FNode {
     );
   }
 
-  Matrix4 getProjectionMatrix(double width, double height) {
-    if (width <= 0 || height <= 0) return Matrix4.identity();
-    final aspect = width / height;
+  // Per-frame matrix cache.
+  //
+  // getViewMatrix runs a full general 4x4 inverse — determinant plus sixteen
+  // cofactors — and it was called at least twice a frame plus once for every
+  // FProjector, every call producing the identical result. The cache is keyed
+  // on a frame stamp the engine bumps, so it cannot go stale within a frame or
+  // survive into the next one.
+  int _matrixFrame = -1;
+  double _matrixWidth = -1, _matrixHeight = -1;
+  final Matrix4 _cachedProjection = Matrix4.identity();
+  final Matrix4 _cachedView = Matrix4.identity();
+  final Matrix4 _cachedScreen = Matrix4.identity();
+  final Matrix4 _viewportMatrix = Matrix4.identity();
+  bool _matricesValid = false;
 
-    if (isOrthographic) {
-      final halfH = orthographicSize;
-      final halfW = halfH * aspect;
-      return makeOrthographicMatrix(-halfW, halfW, -halfH, halfH, near, far);
+  /// Frame counter the cache is keyed on. Set by [FEngine] each tick.
+  int frameStamp = 0;
+
+  void _refreshMatrices(double width, double height) {
+    if (_matricesValid && _matrixFrame == frameStamp && _matrixWidth == width && _matrixHeight == height) {
+      return;
+    }
+    _matrixFrame = frameStamp;
+    _matrixWidth = width;
+    _matrixHeight = height;
+    _matricesValid = true;
+
+    if (width <= 0 || height <= 0) {
+      _cachedProjection.setIdentity();
+    } else {
+      final aspect = width / height;
+      if (isOrthographic) {
+        final halfH = orthographicSize;
+        final halfW = halfH * aspect;
+        setOrthographicMatrix(_cachedProjection, -halfW, halfW, -halfH, halfH, near, far);
+      } else {
+        setPerspectiveMatrix(_cachedProjection, radians(fov), aspect, near, far);
+      }
     }
 
-    return makePerspectiveMatrix(radians(fov), aspect, near, far);
+    _cachedView.setFrom(worldMatrix);
+    if (_shakeOffset.length2 != 0) {
+      _cachedView.setTranslation(_cachedView.getTranslation() + _shakeOffset);
+    }
+    _cachedView.invert();
+
+    _viewportMatrix
+      ..setIdentity()
+      ..setTranslationRaw(width / 2, height / 2, 0.0)
+      ..scaleByVector3(Vector3(width / 2, -height / 2, 1.0));
+
+    _cachedScreen
+      ..setFrom(_viewportMatrix)
+      ..multiply(_cachedProjection)
+      ..multiply(_cachedView);
+  }
+
+  /// Invalidates the cache. Call after changing projection settings outside
+  /// the normal frame flow.
+  void invalidateMatrices() => _matricesValid = false;
+
+  Matrix4 getProjectionMatrix(double width, double height) {
+    _refreshMatrices(width, height);
+    return _cachedProjection;
   }
 
   Matrix4 getViewMatrix() {
-    // The view matrix is the inverse of the camera's world matrix.
-    final matrix = Matrix4.copy(worldMatrix);
-    if (_shakeOffset.length2 != 0) {
-      matrix.setTranslation(matrix.getTranslation() + _shakeOffset);
-    }
-    matrix.invert();
-    return matrix;
+    // Uses whatever viewport the cache was last refreshed for; the view matrix
+    // does not depend on it.
+    _refreshMatrices(_matrixWidth > 0 ? _matrixWidth : 1, _matrixHeight > 0 ? _matrixHeight : 1);
+    return _cachedView;
   }
 
   /// Calculates the visible world size at a given distance from the camera
@@ -251,10 +301,8 @@ class FCameraNode extends FNode {
   /// widget positioning share one projection path instead of each rolling
   /// their own.
   Matrix4 getScreenMatrix(Vector2 viewportSize) {
-    final viewport = Matrix4.identity()
-      ..setTranslationRaw(viewportSize.x / 2, viewportSize.y / 2, 0.0)
-      ..scaleByVector3(Vector3(viewportSize.x / 2, -viewportSize.y / 2, 1.0));
-    return viewport * getProjectionMatrix(viewportSize.x, viewportSize.y) * getViewMatrix();
+    _refreshMatrices(viewportSize.x, viewportSize.y);
+    return _cachedScreen;
   }
 
   /// Projects a world point to screen pixels through [getScreenMatrix].

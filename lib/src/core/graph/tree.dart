@@ -46,8 +46,8 @@ class FSceneTree {
   /// Always walks the tree, even while [paused] — [FNode] decides per node
   /// whether to run, so `ProcessMode.always` and `ProcessMode.paused` mean
   /// something. Returning early here made both modes dead letters.
-  void process(double dt) {
-    root.update(dt);
+  void process(double dt, [int frame = -1]) {
+    root.update(dt, frame);
   }
 
   // --- Group Management ---

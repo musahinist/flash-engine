@@ -34,19 +34,45 @@ class _FTriangleState extends FNodeWidgetState<FTriangle, _TriangleNode> {
 }
 
 class _TriangleNode extends FNode {
-  double size;
-  Color color;
+  _TriangleNode({required double size, required Color color})
+    : _size = size,
+      _color = color;
 
-  _TriangleNode({required this.size, required this.color});
+  double _size;
+  Color _color;
+
+  // A Path is a native SkPath; building one per frame was the most expensive
+  // per-primitive allocation in the engine.
+  final Path _path = Path();
+  final Paint _paint = Paint();
+  double _pathSize = double.nan;
+  Color? _paintColor;
+
+  double get size => _size;
+  set size(double value) => _size = value;
+
+  Color get color => _color;
+  set color(Color value) => _color = value;
+
+  @override
+  Rect? get bounds => Rect.fromCenter(center: Offset.zero, width: _size, height: _size);
 
   @override
   void draw(Canvas canvas) {
-    final path = Path();
-    final half = size / 2;
-    path.moveTo(0, -half);
-    path.lineTo(half, half);
-    path.lineTo(-half, half);
-    path.close();
-    canvas.drawPath(path, Paint()..color = color);
+    if (_pathSize != _size) {
+      _pathSize = _size;
+      final half = _size / 2;
+      _path
+        ..reset()
+        ..moveTo(0, -half)
+        ..lineTo(half, half)
+        ..lineTo(-half, half)
+        ..close();
+    }
+    if (_paintColor != _color) {
+      _paintColor = _color;
+      _paint.color = _color;
+    }
+    canvas.drawPath(_path, _paint);
   }
 }

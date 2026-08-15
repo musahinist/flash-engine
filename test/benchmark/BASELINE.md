@@ -134,6 +134,39 @@ when it changes.
 The p95 improvement on deep hierarchies is the worldVersion gate: fewer
 boundary reads means fewer of the spikes that were setting the tail.
 
+## Phase 3 — Dart allocation
+
+| Change | Scenario | Before | After | |
+|---|---|---|---|---|
+| Allocation-free frustum culling (in-place multiply, outcode AND, early exit) + camera matrices cached per frame | 500 rigid bodies, `prepareRender` | 0.090 ms | 0.047 ms | **−48%** |
+
+`prepareRender` is the only section where culling runs at width, because it is
+the only scenario with many bounded nodes. Culling previously allocated a
+Matrix4, a List and eight Vector4s *per bounded node per frame*, and
+`getViewMatrix` ran a full general 4x4 inverse at least twice a frame plus once
+per FProjector, every call producing the same matrix.
+
+Also here, not separately measured: `Paint`/`Path`/`Gradient` caching in
+FCircle, FTriangle and FSphere (a `Path` is a native SkPath and was rebuilt
+every frame); bounds added to FCircle, FTriangle and FSphere, which were never
+being culled at all; `_canProcess` cached per frame instead of walking to the
+root per node; `List.of(children)` dropped from the per-node update loop.
+
+### A caveat on the deep-hierarchy scenario
+
+Repeated runs of the 11,110-node hierarchy give 0.650, 0.729 and 1.067 ms. That
+spread is wider than most of the changes being measured, so **that scenario
+cannot support attribution** at this sample size — it is GC-dominated. An
+apparent regression there after phase 3 turned out to be noise. Only the
+steadier scenarios are quoted above.
+
+### What is still unmeasured
+
+Phase 3's case was always GC pressure rather than inline cost, and object
+counts have not been measured — that needs a DevTools allocation profile
+against the running demo, not a stopwatch in a headless test. The wall-clock
+evidence above covers culling and the camera cache only.
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles

@@ -263,31 +263,52 @@ class FNode {
   /// `super.update(dt)`, which meant two things went wrong: [processMode] was
   /// ignored entirely (the work ran even when disabled), and the parent's
   /// frame work landed after its children had already read it.
-  void update(double dt) {
-    if (!_canProcess()) return;
+  void update(double dt, [int frame = -1]) {
+    if (!_canProcess(frame)) return;
 
     _syncToNative();
     process(dt);
 
-    for (final child in List.of(children)) {
-      child.update(dt);
+    // Iterate by index and re-check the length each step: a node that adds or
+    // removes children during process() is handled without copying the list
+    // for every node in the scene, every frame.
+    for (int i = 0; i < children.length; i++) {
+      children[i].update(dt, frame);
     }
   }
 
-  bool _canProcess() {
+  // Cached for one frame. ProcessMode.inherit made this walk to the root for
+  // every node on every frame, which is O(nodes x depth) to answer a question
+  // whose answer cannot change mid-frame.
+  int _processFrame = -1;
+  bool _processCached = false;
+
+  bool _canProcess([int frame = -1]) {
+    if (frame >= 0 && _processFrame == frame) return _processCached;
+
+    final bool result;
     switch (processMode) {
       case ProcessMode.disabled:
-        return false;
+        result = false;
       case ProcessMode.always:
         // Runs even while the tree is paused.
-        return true;
+        result = true;
       case ProcessMode.paused:
         // Godot semantics: only runs *while* paused.
-        return _tree?.paused ?? false;
+        result = _tree?.paused ?? false;
       case ProcessMode.inherit:
-        if (_tree?.paused ?? false) return false;
-        return parent?._canProcess() ?? true;
+        if (_tree?.paused ?? false) {
+          result = false;
+        } else {
+          result = parent?._canProcess(frame) ?? true;
+        }
     }
+
+    if (frame >= 0) {
+      _processFrame = frame;
+      _processCached = result;
+    }
+    return result;
   }
 
   void render(Canvas canvas, Matrix4 globalTransform) {
@@ -308,15 +329,6 @@ class FNode {
   /// Render only this node using its pre-calculated world matrix
   void renderSelf(Canvas canvas, Matrix4 viewportProjectionMatrix, List<FLightNode> activeLights) {
     if (!visible) return;
-
-    // Frustum Culling check
-    if (bounds != null) {
-      // Very basic culling: Check if world position Z is behind camera is done in loop usually
-      // Ideally we project bounds to screen and check intersection with viewport
-      // For now, let's just skip if bounds are completely off-screen in simple 2D terms if needed
-      // But we are in 3D, so we rely on standard pipeline for now.
-      // Optimization: Subclasses with bounds will enable future spatial partitioning
-    }
 
     _currentLights = activeLights;
 
