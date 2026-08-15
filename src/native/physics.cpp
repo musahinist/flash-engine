@@ -156,42 +156,61 @@ CollisionManifold detectCircleCircle(NativeBody& a, NativeBody& b) {
     return m;
 }
 
-// Simple SAT helper for OBB vs OBB (Not fully exhaustive, but sufficient for high-quality box physics)
+// Corners and axes of an oriented box, built once per body.
+struct BoxFrame {
+    Vec2 corners[4];
+    Vec2 axisX, axisY;
+};
+
+static inline BoxFrame make_box_frame(const NativeBody& body) {
+    // One sin/cos for the whole body. The previous version called rotate()
+    // — and therefore cos+sin — for all four corners on each of four axes,
+    // for both bodies: 64 trig calls per pair where 4 suffice.
+    const float c = std::cos(body.rotation);
+    const float s = std::sin(body.rotation);
+    const float hw = body.width * 0.5f;
+    const float hh = body.height * 0.5f;
+
+    BoxFrame f;
+    f.axisX = { c, s };
+    f.axisY = { -s, c };
+
+    const Vec2 ex = { c * hw,  s * hw };   // half-extent along local X
+    const Vec2 ey = { -s * hh, c * hh };   // half-extent along local Y
+    const Vec2 pos = { body.x, body.y };
+
+    f.corners[0] = pos - ex - ey;
+    f.corners[1] = pos + ex - ey;
+    f.corners[2] = pos + ex + ey;
+    f.corners[3] = pos - ex + ey;
+    return f;
+}
+
+static inline void project_frame(const BoxFrame& f, Vec2 axis, float& min, float& max) {
+    min = max = axis.dot(f.corners[0]);
+    for (int i = 1; i < 4; ++i) {
+        const float p = axis.dot(f.corners[i]);
+        if (p < min) min = p;
+        if (p > max) max = p;
+    }
+}
+
 CollisionManifold detectBoxBox(NativeBody& a, NativeBody& b) {
-    auto project = [](NativeBody& body, Vec2 axis, float& min, float& max) {
-        float hw = body.width * 0.5f;
-        float hh = body.height * 0.5f;
-        Vec2 pos = {body.x, body.y};
-        Vec2 v[4] = {
-            pos + rotate({-hw, -hh}, body.rotation),
-            pos + rotate({ hw, -hh}, body.rotation),
-            pos + rotate({ hw,  hh}, body.rotation),
-            pos + rotate({-hw,  hh}, body.rotation)
-        };
-        min = max = axis.dot(v[0]);
-        for (int i = 1; i < 4; ++i) {
-            float p = axis.dot(v[i]);
-            if (p < min) min = p;
-            if (p > max) max = p;
-        }
-    };
+    const BoxFrame fa = make_box_frame(a);
+    const BoxFrame fb = make_box_frame(b);
 
     float minOverlap = 1e10f;
     Vec2 bestAxis;
     NativeBody* ref = &a;
     NativeBody* inc = &b;
+    const BoxFrame* incFrame = &fb;
 
-    Vec2 axes[4] = {
-        rotate({1, 0}, a.rotation),
-        rotate({0, 1}, a.rotation),
-        rotate({1, 0}, b.rotation),
-        rotate({0, 1}, b.rotation)
-    };
+    const Vec2 axes[4] = { fa.axisX, fa.axisY, fb.axisX, fb.axisY };
 
     for (int i = 0; i < 4; ++i) {
         float minA, maxA, minB, maxB;
-        project(a, axes[i], minA, maxA);
-        project(b, axes[i], minB, maxB);
+        project_frame(fa, axes[i], minA, maxA);
+        project_frame(fb, axes[i], minB, maxB);
 
         float overlap = std::min(maxA, maxB) - std::max(minA, minB);
         if (overlap <= 0) return {{0,0}, 0, {{0,0}}, 0, false};
@@ -199,8 +218,8 @@ CollisionManifold detectBoxBox(NativeBody& a, NativeBody& b) {
         if (overlap < minOverlap) {
             minOverlap = overlap;
             bestAxis = axes[i];
-            if (i < 2) { ref = &a; inc = &b; }
-            else { ref = &b; inc = &a; }
+            if (i < 2) { ref = &a; inc = &b; incFrame = &fb; }
+            else       { ref = &b; inc = &a; incFrame = &fa; }
         }
     }
 
@@ -213,18 +232,12 @@ CollisionManifold detectBoxBox(NativeBody& a, NativeBody& b) {
     m.penetration = minOverlap;
     m.contactCount = 0;
 
-    // Stable Multi-point Contact: find vertices of 'inc' that overlap 'ref' on bestAxis
-    float hw_inc = inc->width * 0.5f, hh_inc = inc->height * 0.5f;
-    Vec2 pos_inc = {inc->x, inc->y};
-    Vec2 v_inc[4] = {
-        pos_inc + rotate({-hw_inc, -hh_inc}, inc->rotation),
-        pos_inc + rotate({ hw_inc, -hh_inc}, inc->rotation),
-        pos_inc + rotate({ hw_inc,  hh_inc}, inc->rotation),
-        pos_inc + rotate({-hw_inc,  hh_inc}, inc->rotation)
-    };
+    // Stable Multi-point Contact: vertices of 'inc' that overlap 'ref' on bestAxis.
+    // Corners are reused from the frame built at the top — no more trig here.
+    const Vec2* v_inc = incFrame->corners;
 
     float minA, maxA;
-    project(*ref, bestAxis, minA, maxA);
+    project_frame(ref == &a ? fa : fb, bestAxis, minA, maxA);
 
     for (int i = 0; i < 4; ++i) {
         float p = bestAxis.dot(v_inc[i]);
@@ -544,34 +557,53 @@ FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     }
 
     // Phase 5: Position Correction (pseudo-impulse for rotation stability)
+    //
+    // This used to re-run the entire narrow phase — SAT and all — inside every
+    // position iteration. With 4 iterations and 2 sub-steps that meant the same
+    // box pair went through detectBoxBox eight times per frame, purely to
+    // re-derive a penetration depth.
+    //
+    // The constraint already carries what is needed: the contact anchors
+    // relative to each body centre, and baseSeparation from manifold time. At
+    // that moment the two anchor points coincide in world space, so the current
+    // separation is baseSeparation plus however far the anchors have drifted
+    // apart along the normal. That is a dot product, and it shrinks as the
+    // solver pushes the bodies apart — which is exactly the feedback the
+    // re-detection was providing.
+    //
+    // This is how Box2D's position solver works, and it is why those fields
+    // exist on ContactConstraintPoint.
     const float slop = 0.01f, baumgarte = 0.2f;
     for (int iter = 0; iter < world->positionIterations; ++iter) {
         for (int i = 0; i < world->activeConstraints; ++i) {
             ContactConstraint& c = world->constraints[i];
             NativeBody& a = world->bodies[c.bodyA], &b = world->bodies[c.bodyB];
             if (!a.isAwake && !b.isAwake) continue;
+            if (c.pointCount == 0) continue;
 
-            CollisionManifold m = {{0,0}, 0, {{0,0}}, 0, false};
-            if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_CIRCLE) m = detectCircleCircle(a, b);
-            else if (a.shapeType == SHAPE_BOX && b.shapeType == SHAPE_BOX) m = detectBoxBox(a, b);
-            else if (a.shapeType == SHAPE_CIRCLE) m = detectCircleBox(a, b);
-            else { m = detectCircleBox(b, a); }
+            const Vec2 normal = { c.normalX, c.normalY };
+            const Vec2 posA = { a.x, a.y };
+            const Vec2 posB = { b.x, b.y };
 
-            if (!m.collided) continue;
-            if (a.shapeType == SHAPE_CIRCLE && b.shapeType == SHAPE_BOX) m.normal = m.normal * -1.0f;
-            
-            float C = std::max(m.penetration - slop, 0.0f) * baumgarte;
-            if (C <= 0) continue;
+            for (int j = 0; j < c.pointCount; ++j) {
+                ContactConstraintPoint& cp = c.points[j];
+                const Vec2 ra = { cp.anchorAx, cp.anchorAy };
+                const Vec2 rb = { cp.anchorBx, cp.anchorBy };
 
-            float impulsePerPoint = C / (float)m.contactCount;
-            for (int j = 0; j < m.contactCount; ++j) {
-                Vec2 ra = m.contacts[j] - Vec2{a.x, a.y}, rb = m.contacts[j] - Vec2{b.x, b.y};
-                float raN = ra.cross(m.normal), rbN = rb.cross(m.normal);
-                float k = a.inverseMass + b.inverseMass + raN * raN * a.inverseInertia + rbN * rbN * b.inverseInertia;
+                // Anchors coincided when the manifold was built, so the drift
+                // along the normal is the separation gained since then.
+                const float drift = ((posB + rb) - (posA + ra)).dot(normal);
+                const float separation = cp.baseSeparation + drift;
+
+                const float C = std::max(-separation - slop, 0.0f) * baumgarte;
+                if (C <= 0.0f) continue;
+
+                const float raN = ra.cross(normal), rbN = rb.cross(normal);
+                const float k = a.inverseMass + b.inverseMass +
+                                raN * raN * a.inverseInertia + rbN * rbN * b.inverseInertia;
                 if (k <= 1e-6f) continue;
-                
-                float impulse = impulsePerPoint / k;
-                Vec2 P = m.normal * impulse;
+
+                const Vec2 P = normal * (C / k);
                 if (a.type != STATIC) { a.x -= P.x * a.inverseMass; a.y -= P.y * a.inverseMass; a.rotation -= ra.cross(P) * a.inverseInertia; }
                 if (b.type != STATIC) { b.x += P.x * b.inverseMass; b.y += P.y * b.inverseMass; b.rotation += rb.cross(P) * b.inverseInertia; }
             }

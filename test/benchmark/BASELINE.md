@@ -53,3 +53,42 @@ subtrees — both O(depth) per node.
   `paint.particles`) — those sections only run under a real `CustomPaint`.
 - No allocation counts. DevTools memory profiling on the demo is the tool for
   Phase 3.
+
+
+---
+
+# Results
+
+Measured the same way, by reverting just the file under test and re-running.
+
+## Phase 1 — waste inside C++
+
+| Change | Scenario | Before | After | |
+|---|---|---|---|---|
+| Narrow-phase box frames built once per body (64 trig/pair → 4) + position solver works from stored anchors instead of re-running SAT | 300 boxes stacking (physics section) | 0.386 ms | 0.316 ms | **−18%** |
+| same | 500 mixed bodies (physics section) | 0.761 ms | 0.687 ms | **−10%** |
+| Unit polygon hoisted out of the per-particle loop; 1/w carried from pass1 | particle vertex fill, 100k @ 12 sides | 1.945 ms | 0.920 ms | **−53% (2.1x)** |
+
+### What this corrected about the plan
+
+The arithmetic said the narrow-phase trig was "the single biggest item" — 64
+cos/sin per box pair, re-run in every position iteration, ~128,000 per frame.
+The measured win is 10–18%, not an order of magnitude. Trig is cheap on modern
+hardware relative to everything else the solver does (memory traffic, impulse
+iterations, broadphase), and the mixed scenario spends most of its time in
+circle paths that never reach `detectBoxBox`.
+
+The particle vertex fill is the opposite: an unglamorous constant hoisted out
+of an inner loop, and it halved the cost of the path the 1M-particle target
+depends on. At 1M this is roughly 19.5 ms → 9.2 ms per fill — still far past a
+60 fps budget, but half of it.
+
+Estimating from operation counts ranked these two the wrong way round.
+
+## Known bug found while testing
+
+Two **dynamic** boxes do not stack: they collapse into a single layer. Circles
+stack correctly, and a box rests correctly on a *static* box, so it is specific
+to dynamic-box against dynamic-box contacts. Verified against unmodified
+`physics.cpp` — pre-existing, not a regression from this work. Covered by a
+skipped test in `test/physics_behaviour_test.dart`.

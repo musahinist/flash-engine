@@ -47,29 +47,58 @@ struct ThreadWork {
     int endIdx;
     int visibleCount;
     std::vector<int> visibleIndices;
+    // 1/w carried from pass1 so pass2 does not recompute the projection depth.
+    std::vector<float> visibleInvW;
 };
+
+// Unit polygon for a shape, in screen space. The corner angles do not depend
+// on the particle, so recomputing cosf/sinf per particle per corner was pure
+// waste: at 10k particles with 12 sides that is 240,000 trig calls a frame for
+// twelve constant values.
+struct UnitPolygon {
+    float cx[12];
+    float cy[12];
+    int sides;
+};
+
+static UnitPolygon make_unit_polygon(int shapeType) {
+    UnitPolygon poly;
+    poly.sides = 4;
+    if (shapeType == 1) poly.sides = 6;
+    else if (shapeType == 2) poly.sides = 8;
+    else if (shapeType == 3) poly.sides = 12;
+    else if (shapeType == 4) poly.sides = 3;
+
+    for (int i = 0; i < poly.sides; ++i) {
+        const float angle = i * (2.0f * (float)M_PI / poly.sides);
+        poly.cx[i] = cosf(angle);
+        poly.cy[i] = sinf(angle);
+    }
+    return poly;
+}
 
 void fill_chunk_pass1(ParticleEmitter* emitter, float* m, ThreadWork& work) {
     work.visibleCount = 0;
     work.visibleIndices.clear();
+    work.visibleInvW.clear();
     work.visibleIndices.reserve(work.endIdx - work.startIdx);
+    work.visibleInvW.reserve(work.endIdx - work.startIdx);
 
     for (int i = work.startIdx; i < work.endIdx; ++i) {
         NativeParticle& p = emitter->particles[i];
         float wz = p.x * m[3] + p.y * m[7] + p.z * m[11] + m[15];
         if (wz >= 0.1f) {
             work.visibleIndices.push_back(i);
+            // Carried forward so pass2 does not redo the same four multiplies.
+            work.visibleInvW.push_back(1.0f / wz);
             work.visibleCount++;
         }
     }
 }
 
 void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, const ThreadWork& work, int globalOffset) {
-    int sides = 4;
-    if (emitter->shapeType == 1) sides = 6;
-    else if (emitter->shapeType == 2) sides = 8;
-    else if (emitter->shapeType == 3) sides = 12;
-    else if (emitter->shapeType == 4) sides = 3;
+    const UnitPolygon poly = make_unit_polygon(emitter->shapeType);
+    const int sides = poly.sides;
 
     int triCount = sides - 2;
     int vCount = triCount * 3;
@@ -77,10 +106,10 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
     int vPtr = globalOffset * vCount * 2;
     int cPtr = globalOffset * vCount;
 
-    for (int idx : work.visibleIndices) {
+    for (size_t n = 0; n < work.visibleIndices.size(); ++n) {
+        const int idx = work.visibleIndices[n];
         NativeParticle& p = emitter->particles[idx];
-        float wz = p.x * m[3] + p.y * m[7] + p.z * m[11] + m[15];
-        float invW = 1.0f / wz;
+        const float invW = work.visibleInvW[n];
         float screenX = (p.x * m[0] + p.y * m[4] + p.z * m[8] + m[12]) * invW;
         float screenY = (p.x * m[1] + p.y * m[5] + p.z * m[9] + m[13]) * invW;
         
@@ -91,12 +120,11 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
         uint32_t alpha = (uint32_t)(p.life * 255.0f);
         uint32_t col = (p.color & 0x00FFFFFF) | (alpha << 24);
 
-        // Generate N-sided polygon vertices
+        // Scale and offset the precomputed unit polygon.
         float px[12], py[12];
         for (int i = 0; i < sides; ++i) {
-            float angle = i * (2.0f * M_PI / sides);
-            px[i] = screenX + cosf(angle) * halfSize;
-            py[i] = screenY + sinf(angle) * halfSize;
+            px[i] = screenX + poly.cx[i] * halfSize;
+            py[i] = screenY + poly.cy[i] * halfSize;
         }
 
         // Fan-out triangles (0-i-(i+1))

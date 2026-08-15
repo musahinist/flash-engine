@@ -3,6 +3,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flash/flash.dart';
+import 'package:flash/src/core/native/flash_native_bindings.dart' as native;
+import 'package:ffi/ffi.dart';
+import 'dart:ffi';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 /// Frame-time baseline for the engine loop.
@@ -152,6 +155,50 @@ void main() {
       report('500 rigid bodies', engine);
     });
 
+    test('300 boxes stacking', () {
+      // Box-box pairs are the expensive narrow-phase case: SAT with per-corner
+      // projection. The mixed scenario above is half circles, which take a
+      // much cheaper path, so it understates the cost of detectBoxBox.
+      final engine = FEngine()..profiler.enabled = true;
+      addTearDown(engine.dispose);
+      engine.viewportSize.setValues(1200, 800);
+
+      final world = FPhysicsSystem(gravity: v.Vector2(0, -980));
+      addTearDown(world.dispose);
+      engine.physicsWorld = world;
+
+      engine.scene.addChild(
+        FPhysicsBody(
+          world: world.world,
+          type: FPhysics.staticBody,
+          shapeType: FPhysics.box,
+          x: 0,
+          y: -400,
+          width: 3000,
+          height: 60,
+        ),
+      );
+
+      final rnd = Random(23);
+      for (int i = 0; i < 300; i++) {
+        engine.scene.addChild(
+          FPhysicsBody(
+            world: world.world,
+            type: FPhysics.dynamicBody,
+            shapeType: FPhysics.box,
+            x: (rnd.nextDouble() - 0.5) * 900,
+            y: -350 + (i ~/ 20) * 40.0,
+            width: 30,
+            height: 30,
+            rotation: rnd.nextDouble() * 0.2,
+          ),
+        );
+      }
+
+      run(engine, 400);
+      report('300 boxes stacking', engine);
+    });
+
     test('100k particles', () {
       final engine = FEngine()..profiler.enabled = true;
       addTearDown(engine.dispose);
@@ -170,6 +217,69 @@ void main() {
 
       run(engine, 120);
       report('100k particles (active: ${emitter.activeCount})', engine);
+    });
+
+    test('particle vertex fill (paint path)', () {
+      // fill_vertex_buffer is only reached through FPainter, which needs a real
+      // CustomPaint — so the engine-loop scenarios above never touch it. This
+      // drives it directly, because it is the path the 1M-particle target
+      // actually depends on.
+      final engine = FEngine();
+      addTearDown(engine.dispose);
+
+      final emitter = FParticleEmitter(
+        config: ParticleEmitterConfig(
+          emissionRate: 200000,
+          maxParticles: 100000,
+          lifetimeMin: 5,
+          lifetimeMax: 8,
+          shapeType: 3, // 12-sided: the most vertices per particle
+          startColor: Colors.orange,
+        ),
+      );
+      engine.scene.addChild(emitter);
+      for (int i = 0; i < 60; i++) {
+        engine.debugTick(1 / 60);
+      }
+
+      const maxVertsPerParticle = 30;
+      final capacity = emitter.activeCount;
+      final vertices = calloc<Float>(capacity * maxVertsPerParticle * 2);
+      final colors = calloc<Uint32>(capacity * maxVertsPerParticle);
+      final matrix = calloc<Float>(16);
+      addTearDown(() {
+        calloc.free(vertices);
+        calloc.free(colors);
+        calloc.free(matrix);
+      });
+      // A plain perspective-ish matrix; only w must stay positive.
+      for (int i = 0; i < 16; i++) {
+        matrix[i] = 0;
+      }
+      matrix[0] = 1;
+      matrix[5] = 1;
+      matrix[10] = 1;
+      matrix[15] = 1000;
+
+      final sw = Stopwatch()..start();
+      const iterations = 60;
+      var rendered = 0;
+      for (int i = 0; i < iterations; i++) {
+        rendered = native.fillVertexBuffer(
+          emitter.nativeEmitterPointer,
+          matrix,
+          vertices,
+          colors,
+          capacity,
+        );
+      }
+      sw.stop();
+
+      // ignore: avoid_print
+      print('\n=== particle vertex fill ===\n'
+          '  ${emitter.activeCount} particles, 12 sides, $rendered rendered\n'
+          '  ${(sw.elapsedMicroseconds / iterations / 1000).toStringAsFixed(3)} ms per fill');
+      expect(rendered, greaterThan(0));
     });
   });
 }

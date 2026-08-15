@@ -33,6 +33,12 @@ class FNode {
   int get nativeNodeId => _nativeNodeId;
   Pointer<NativeNode>? _nativeNodePtr;
   int _lastFetchedVersion = -1;
+
+  /// Debug-only count of how many times the world matrix was pulled across
+  /// the FFI boundary. Lets a test assert that a stationary node stops
+  /// re-reading. Only maintained when asserts are enabled.
+  @visibleForTesting
+  int debugMatrixFetchCount = 0;
   bool _localSyncNeeded = true;
 
   // -- Lifecycle --
@@ -350,9 +356,14 @@ class FNode {
     // down, so this must not assume _tree is still attached.
     final engine = _tree?.engine;
     if (_nativeNodePtr != null && engine != null && engine.hasNativeSceneGraph) {
-      final nativeScene = engine.nativeScene.ref;
-      if (_lastFetchedVersion != nativeScene.totalUpdates) {
-        final nm = _nativeNodePtr!.ref.worldMatrix;
+      final n = _nativeNodePtr!.ref;
+      // Gate on this node's own worldVersion, which C++ only bumps when it
+      // actually recomputes the matrix. The scene-wide totalUpdates was used
+      // here before, and that increments unconditionally every frame — so the
+      // comparison was always true and every node re-read 16 floats across the
+      // FFI boundary every frame, moving or not.
+      if (_lastFetchedVersion != n.worldVersion) {
+        final nm = n.worldMatrix;
         _cachedWorldMatrix.setValues(
           nm.m0,
           nm.m1,
@@ -371,8 +382,12 @@ class FNode {
           nm.m14,
           nm.m15,
         );
-        _lastFetchedVersion = nativeScene.totalUpdates;
+        _lastFetchedVersion = n.worldVersion;
         _worldDirty = false;
+        assert(() {
+          debugMatrixFetchCount++;
+          return true;
+        }());
       }
       return _cachedWorldMatrix;
     }
