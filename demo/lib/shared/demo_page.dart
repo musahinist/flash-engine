@@ -61,9 +61,11 @@ class DemoPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    // On a short window the control column would run off the bottom, so it
-    // scrolls rather than overflowing.
-    final maxControlsHeight = media.size.height * 0.62;
+    // The column scrolls rather than overflowing, but it should only need to
+    // on a genuinely short window: at 62% of the height the last control was
+    // being sliced in half on an ordinary desktop window, which reads as a
+    // rendering fault rather than as "there is more below".
+    final maxControlsHeight = (media.size.height - DemoTheme.edgeInset * 2 - 72).clamp(120.0, 900.0);
 
     return Scaffold(
       backgroundColor: DemoTheme.background,
@@ -97,6 +99,9 @@ class DemoPage extends StatelessWidget {
                                   padding: const EdgeInsets.only(bottom: DemoTheme.gap),
                                   child: control,
                                 ),
+                              // Room to scroll the last control clear of the
+                              // hint at the bottom of the page.
+                              const SizedBox(height: 56),
                             ],
                           ],
                         ),

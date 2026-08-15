@@ -75,7 +75,7 @@ class FScene extends StatefulWidget {
     this.overlay = const [],
     this.physicsWorld,
     this.autoUpdate = true,
-    this.showDebugOverlay = true,
+    this.showDebugOverlay = false,
     this.enableInputCapture = true,
     this.onReady,
     this.onInit,

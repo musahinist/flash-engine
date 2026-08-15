@@ -9,6 +9,12 @@ import 'src/widgets/framework.dart';
 class FView extends StatefulWidget {
   final Widget child;
   final FPhysicsSystem? physicsWorld;
+  /// Draws a small FPS and node-count panel over the top-right corner.
+  ///
+  /// Off by default: an engine has no business painting diagnostics over
+  /// somebody's game unless they ask for it. It was on, which meant every
+  /// application built with FView got a debug panel in the corner — and any
+  /// HUD placed there was drawn underneath it.
   final bool showDebugOverlay;
 
   /// If false, Flash will not capture pointer/keyboard input,
@@ -40,7 +46,7 @@ class FView extends StatefulWidget {
     super.key,
     required this.child,
     this.physicsWorld,
-    this.showDebugOverlay = true,
+    this.showDebugOverlay = false,
     this.enableInputCapture = true,
     this.onUpdate,
     this.onReady,

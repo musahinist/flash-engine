@@ -23,9 +23,13 @@ class SpriteDemo extends StatefulWidget {
 }
 
 class _SpriteDemoState extends State<SpriteDemo> {
+  static const int _frameCount = 4;
+  static const double _frameSize = 64;
+
   ui.Image? _sheet;
   double _scale = 1;
   bool _spin = true;
+  bool _flip = false;
 
   @override
   void initState() {
@@ -42,8 +46,8 @@ class _SpriteDemoState extends State<SpriteDemo> {
 
   /// Paints a four-frame sheet, 64x64 per frame, and rasterises it.
   Future<void> _buildSheet() async {
-    const frame = 64.0;
-    const frames = 4;
+    const frame = _frameSize;
+    const frames = _frameCount;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
@@ -113,6 +117,7 @@ class _SpriteDemoState extends State<SpriteDemo> {
           ],
         ),
         DemoToggle(label: 'Spin', value: _spin, onChanged: (v) => setState(() => _spin = v)),
+        DemoToggle(label: 'Flip X', value: _flip, onChanged: (v) => setState(() => _flip = v)),
       ],
       readouts: [
         DemoStat(
@@ -120,7 +125,7 @@ class _SpriteDemoState extends State<SpriteDemo> {
           value: sheet == null ? 'building…' : '${sheet.width}x${sheet.height}',
         ),
       ],
-      hint: 'The sheet is drawn at runtime with a PictureRecorder — no asset needed.',
+      hint: 'The row below plays the sheet as a flipbook: one src rect per frame.',
       scene: FView(
         child: sheet == null
             ? const SizedBox.shrink()
@@ -144,6 +149,10 @@ class _SpriteDemoState extends State<SpriteDemo> {
 
                   // Sprites are nodes: they take a transform like anything
                   // else, and FAnimated is enough to drive one.
+                  //
+                  // `src` picks one frame out of the sheet. Without it every
+                  // sprite draws the whole atlas squashed into its rect, which
+                  // is what this demo did before the parameter existed.
                   FAnimated(
                     builder: (context, elapsed) => FNodes(
                       children: [
@@ -152,6 +161,14 @@ class _SpriteDemoState extends State<SpriteDemo> {
                             image: sheet,
                             width: 128 * _scale,
                             height: 128 * _scale,
+                            src: Rect.fromLTWH(
+                              // Each sprite runs the flipbook at its own phase.
+                              ((elapsed * 6 + i).floor() % _frameCount) * _frameSize,
+                              0,
+                              _frameSize,
+                              _frameSize,
+                            ),
+                            flipX: _flip,
                             position: v.Vector3(
                               -320 + i * 160.0,
                               -80 + sin(elapsed * 1.8 + i) * 40,

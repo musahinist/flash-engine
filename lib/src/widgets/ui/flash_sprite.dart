@@ -10,11 +10,29 @@ class FSprite extends FNodeWidget {
   final double? width;
   final double? height;
 
+  /// The region of [image] to draw, in image pixels. Null draws all of it.
+  ///
+  /// This is how you pick a frame out of an atlas, which is the usual way a
+  /// game ships sprites. `fromAsset` already advertised a `src` parameter and
+  /// silently dropped it: every sprite drew the whole sheet squashed into its
+  /// destination rect, however many frames the sheet held.
+  final ui.Rect? src;
+
+  /// Mirrors the sprite horizontally, for a character that walks both ways
+  /// off one set of frames.
+  final bool flipX;
+
+  /// Mirrors the sprite vertically.
+  final bool flipY;
+
   const FSprite({
     super.key,
     required this.image,
     this.width,
     this.height,
+    this.src,
+    this.flipX = false,
+    this.flipY = false,
     super.position,
     super.rotation,
     super.scale,
@@ -39,6 +57,7 @@ class FSprite extends FNodeWidget {
       image: image,
       width: width,
       height: height,
+      src: src,
       position: position,
       rotation: rotation,
       scale: scale,
@@ -52,7 +71,14 @@ class FSprite extends FNodeWidget {
 
 class _FSpriteState extends FNodeWidgetState<FSprite, _FSpriteNode> {
   @override
-  _FSpriteNode createNode() => _FSpriteNode(image: widget.image, width: widget.width, height: widget.height);
+  _FSpriteNode createNode() => _FSpriteNode(
+    image: widget.image,
+    width: widget.width,
+    height: widget.height,
+    src: widget.src,
+    flipX: widget.flipX,
+    flipY: widget.flipY,
+  );
 
   @override
   void applyProperties([FSprite? oldWidget]) {
@@ -60,6 +86,9 @@ class _FSpriteState extends FNodeWidgetState<FSprite, _FSpriteNode> {
     node.image = widget.image;
     node.width = widget.width;
     node.height = widget.height;
+    node.src = widget.src;
+    node.flipX = widget.flipX;
+    node.flipY = widget.flipY;
   }
 }
 
@@ -67,33 +96,49 @@ class _FSpriteNode extends FNode {
   ui.Image image;
   double? width;
   double? height;
+  Rect? src;
+  bool flipX;
+  bool flipY;
 
   final Paint _paint = Paint();
 
-  _FSpriteNode({required this.image, this.width, this.height}) {
+  _FSpriteNode({
+    required this.image,
+    this.width,
+    this.height,
+    this.src,
+    this.flipX = false,
+    this.flipY = false,
+  }) {
     _paint.filterQuality = FilterQuality.medium;
     _paint.isAntiAlias = true;
   }
 
+  /// Falls back to the sprite's source size, so a frame from an atlas is drawn
+  /// at the frame's size rather than the whole sheet's.
+  Size get _drawSize {
+    final source = src;
+    return Size(
+      width ?? source?.width ?? image.width.toDouble(),
+      height ?? source?.height ?? image.height.toDouble(),
+    );
+  }
+
   @override
   void draw(Canvas canvas) {
-    // Only rebuild rects if size changes? The rect creation is cheap enough for now,
-    // but paint creation is expensive. We cached paint.
+    final size = _drawSize;
+    final source = src ?? Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+    final dst = Rect.fromCenter(center: Offset.zero, width: size.width, height: size.height);
 
-    final double drawWidth = width ?? image.width.toDouble();
-    final double drawHeight = height ?? image.height.toDouble();
-
-    final src = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
-    final dst = Rect.fromCenter(center: Offset.zero, width: drawWidth, height: drawHeight);
-
-    canvas.scale(1, -1); // Un-flip Y for drawing in engine space
-    canvas.drawImageRect(image, src, dst, _paint);
+    // The engine is Y-up and the canvas is Y-down, so the sprite is flipped
+    // back before drawing; the flip flags fold into the same scale.
+    canvas.scale(flipX ? -1 : 1, flipY ? 1 : -1);
+    canvas.drawImageRect(image, source, dst, _paint);
   }
 
   @override
   Rect? get bounds {
-    final double drawWidth = width ?? image.width.toDouble();
-    final double drawHeight = height ?? image.height.toDouble();
-    return Rect.fromCenter(center: Offset.zero, width: drawWidth, height: drawHeight);
+    final size = _drawSize;
+    return Rect.fromCenter(center: Offset.zero, width: size.width, height: size.height);
   }
 }
