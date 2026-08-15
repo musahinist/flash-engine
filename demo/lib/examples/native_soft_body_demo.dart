@@ -1,8 +1,20 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+
 import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+
+/// Pressure soft bodies solved in C++.
+///
+/// A ring of points held together by distance constraints, with an area
+/// constraint pushing outward — the "pressure" control is that target area.
+/// Stiffness is how hard the distance constraints pull per iteration.
+///
+/// Drag a point: `setSoftBodyPoint` moves it and zeroes its velocity, which is
+/// what stops a drag from launching the whole body.
 class NativeSoftBodyDemo extends StatefulWidget {
   const NativeSoftBodyDemo({super.key});
 
@@ -86,9 +98,33 @@ class _NativeSoftBodyDemoState extends State<NativeSoftBodyDemo> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: LayoutBuilder(
+    return DemoPage(
+      title: 'Native Soft Body',
+      subtitle: 'A pressure-constrained point ring, solved by the C++ core.',
+      controls: [
+        DemoPanel(
+          children: [
+            DemoSlider(
+              label: 'Pressure',
+              value: pressure,
+              min: 1,
+              max: 20,
+              onChanged: (value) => setState(() => pressure = value),
+            ),
+            DemoSlider(
+              label: 'Stiffness',
+              value: stiffness,
+              min: 0.1,
+              max: 1,
+              fractionDigits: 2,
+              onChanged: (value) => setState(() => stiffness = value),
+            ),
+          ],
+        ),
+      ],
+      readouts: const [DemoStat(label: 'Points', value: '32')],
+      hint: 'Drag any point on the blob.',
+      scene: LayoutBuilder(
         builder: (context, constraints) {
           return GestureDetector(
             onPanStart: (d) => _handlePanStart(d, constraints),
@@ -116,54 +152,13 @@ class _NativeSoftBodyDemoState extends State<NativeSoftBodyDemo> {
                         color: Colors.grey[800]!,
                         debugDraw: true,
                       ),
-
-                      // FLight(
-                      //   position: v.Vector3(math.sin(elapsed) * 300, math.cos(elapsed) * 300, 200),
-                      //   color: Colors.cyan,
-                      //   intensity: 1.5,
-                      // ),
                     ],
                   ),
                 ];
               },
-              overlay: [_buildUI()],
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildUI() {
-    return Positioned(
-      top: 60,
-      left: 24,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'BIO-SOFT C++ CORE',
-            style: TextStyle(color: Colors.cyanAccent, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
-          ),
-          const SizedBox(height: 8),
-          const Text('High-Performance Native Elasticity', style: TextStyle(color: Colors.white70, fontSize: 14)),
-          const SizedBox(height: 24),
-          _buildSlider('Pressure', pressure, 1.0, 20.0, (v) => setState(() => pressure = v)),
-          _buildSlider('Stiffness', stiffness, 0.1, 1.0, (v) => setState(() => stiffness = v)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSlider(String label, double value, double min, double max, ValueChanged<double> onChanged) {
-    return SizedBox(
-      width: 200,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$label: ${value.toStringAsFixed(1)}', style: const TextStyle(color: Colors.white, fontSize: 12)),
-          Slider(value: value, min: min, max: max, activeColor: Colors.cyanAccent, onChanged: onChanged),
-        ],
       ),
     );
   }

@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+import '../shared/virtual_joystick.dart';
+
 /// RayCast Demo showcasing FRayCast2D functionality.
 /// - A player-controlled box that shoots a ray from its center.
 /// - Static obstacles that the ray detects.
@@ -42,11 +47,32 @@ class _RayCastDemoState extends State<RayCastDemo> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[900],
-      body: FView(
+    return DemoPage(
+      title: 'Raycasting',
+      subtitle: 'FRayCast2D attached to a moving body, reporting through signals.',
+      controls: [
+        DemoPanel(
+          title: 'Ray hit',
+          children: [
+            ValueListenableBuilder<String>(
+              valueListenable: hitInfoNotifier,
+              builder: (context, info, _) => Text(info, style: DemoTheme.body),
+            ),
+          ],
+        ),
+      ],
+      hint: 'WASD or the stick to move. The ray casts upward from the player.',
+      overlays: [
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: VirtualJoystick(onStickDrag: joystickInput.setValues),
+          ),
+        ),
+      ],
+      scene: FView(
         physicsWorld: physicsSystem,
-        enableInputCapture: true,
         child: Stack(
           children: [
             // SCENE SETUP
@@ -131,41 +157,6 @@ class _RayCastDemoState extends State<RayCastDemo> {
               },
             ),
 
-            // HUD UI
-            Positioned(
-              top: 40,
-              left: 20,
-              child: ValueListenableBuilder<String>(
-                valueListenable: hitInfoNotifier,
-                builder: (context, info, _) {
-                  return Text(
-                    'RayCast Hit: $info',
-                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold),
-                  );
-                },
-              ),
-            ),
-
-            // Back Button
-            Positioned(
-              top: 40,
-              right: 20,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-
-            // Virtual Joystick
-            Positioned(
-              bottom: 40,
-              left: 20,
-              child: VirtualJoystick(
-                onStickDrag: (dx, dy) {
-                  joystickInput.setValues(dx, dy);
-                },
-              ),
-            ),
           ],
         ),
       ),
@@ -201,62 +192,4 @@ class ObstacleNode extends FPhysicsBody {
 }
 
 /// Simple Virtual Joystick Widget
-class VirtualJoystick extends StatefulWidget {
-  final void Function(double dx, double dy) onStickDrag;
-  const VirtualJoystick({super.key, required this.onStickDrag});
 
-  @override
-  State<VirtualJoystick> createState() => _VirtualJoystickState();
-}
-
-class _VirtualJoystickState extends State<VirtualJoystick> {
-  Offset _stickPos = Offset.zero;
-  final double _radius = 60.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onPanStart: (details) => _updateStick(details.localPosition),
-      onPanUpdate: (details) => _updateStick(details.localPosition),
-      onPanEnd: (_) {
-        setState(() {
-          _stickPos = Offset.zero;
-        });
-        widget.onStickDrag(0, 0);
-      },
-      child: Container(
-        width: _radius * 2,
-        height: _radius * 2,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.black.withValues(alpha: 0.3),
-          border: Border.all(color: Colors.white30, width: 2),
-        ),
-        child: Center(
-          child: Transform.translate(
-            offset: _stickPos,
-            child: Container(
-              width: 50,
-              height: 50,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white54),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _updateStick(Offset localPos) {
-    final center = Offset(_radius, _radius);
-    final delta = localPos - center;
-    final dist = delta.distance;
-    final clampedDist = min(dist, _radius);
-    final clampedDelta = dist > 0 ? (delta / dist * clampedDist) : Offset.zero;
-
-    setState(() {
-      _stickPos = clampedDelta;
-    });
-
-    widget.onStickDrag(clampedDelta.dx / _radius, clampedDelta.dy / _radius);
-  }
-}

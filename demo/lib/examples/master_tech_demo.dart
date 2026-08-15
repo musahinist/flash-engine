@@ -5,6 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+import '../shared/virtual_joystick.dart';
+
 // --- Game Logic Nodes ---
 
 class GameController extends FNode {
@@ -129,11 +134,51 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[900],
-      body: FView(
+    return DemoPage(
+      title: 'Master Tech Demo',
+      subtitle: 'Signals, groups, physics and input, all at once.',
+      accent: DemoTheme.accentAlt,
+      controls: [
+        DemoButton(
+          label: 'Collect everything',
+          icon: Icons.auto_awesome_rounded,
+          tint: DemoTheme.warning,
+          onPressed: () => gameController.tree?.callGroup('collectibles', (node) {
+            // A group is the engine's answer to "everything of this kind",
+            // without anyone holding a list.
+            if (node is Coin) {
+              node.collect();
+            } else {
+              node.queueFree();
+            }
+          }),
+        ),
+      ],
+      readouts: [
+        ValueListenableBuilder<int>(
+          valueListenable: scoreNotifier,
+          builder: (context, score, _) => DemoStat(
+            label: 'Score',
+            value: '$score',
+            tint: DemoTheme.warning,
+          ),
+        ),
+      ],
+      hint: 'WASD or the stick. Coins report collection through a signal.',
+      overlays: [
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: VirtualJoystick(
+              tint: DemoTheme.accentAlt,
+              onStickDrag: joystickInput.setValues,
+            ),
+          ),
+        ),
+      ],
+      scene: FView(
         physicsWorld: physicsSystem,
-        enableInputCapture: true,
         child: Stack(
           children: [
             // SCENE SETUP
@@ -200,71 +245,6 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
               },
             ),
 
-            // HUD UI
-            Positioned(
-              top: 40,
-              left: 20,
-              child: ValueListenableBuilder<int>(
-                valueListenable: scoreNotifier,
-                builder: (context, score, _) {
-                  return Text(
-                    'Score: $score',
-                    style: const TextStyle(
-                      color: Colors.yellowAccent,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 10, color: Colors.orange)],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Back Button
-            Positioned(
-              top: 40,
-              right: 20,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-
-            // Virtual Joystick (Left Bottom)
-            Positioned(
-              bottom: 40,
-              left: 20,
-              child: VirtualJoystick(
-                onStickDrag: (dx, dy) {
-                  joystickInput.setValues(dx, dy);
-                },
-              ),
-            ),
-
-            // Controls (Right Bottom)
-            Positioned(
-              bottom: 40,
-              right: 20,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FloatingActionButton.extended(
-                    onPressed: () {
-                      gameController.tree?.callGroup('collectibles', (node) {
-                        if (node is Coin) {
-                          node.collect();
-                        } else {
-                          node.queueFree();
-                        }
-                      });
-                    },
-                    label: const Text('Destroy'),
-                    icon: const Icon(Icons.delete_forever),
-                    backgroundColor: Colors.red,
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -272,64 +252,4 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
   }
 }
 
-/// Simple Virtual Joystick Widget
-class VirtualJoystick extends StatefulWidget {
-  final void Function(double dx, double dy) onStickDrag;
-  const VirtualJoystick({super.key, required this.onStickDrag});
 
-  @override
-  State<VirtualJoystick> createState() => _VirtualJoystickState();
-}
-
-class _VirtualJoystickState extends State<VirtualJoystick> {
-  Offset _stickPos = Offset.zero;
-  final double _radius = 60.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onPanStart: (details) => _updateStick(details.localPosition),
-      onPanUpdate: (details) => _updateStick(details.localPosition),
-      onPanEnd: (_) {
-        setState(() {
-          _stickPos = Offset.zero;
-        });
-        widget.onStickDrag(0, 0);
-      },
-      child: Container(
-        width: _radius * 2,
-        height: _radius * 2,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.black.withValues(alpha: 0.3),
-          border: Border.all(color: Colors.white30, width: 2),
-        ),
-        child: Center(
-          child: Transform.translate(
-            offset: _stickPos,
-            child: Container(
-              width: 50,
-              height: 50,
-              decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white54),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _updateStick(Offset localPos) {
-    final center = Offset(_radius, _radius);
-    final delta = localPos - center;
-    final dist = delta.distance;
-    final clampedDist = min(dist, _radius);
-    final clampedDelta = dist > 0 ? (delta / dist * clampedDist) : Offset.zero;
-
-    setState(() {
-      _stickPos = clampedDelta;
-    });
-
-    // Normalize output -1 to 1
-    widget.onStickDrag(clampedDelta.dx / _radius, clampedDelta.dy / _radius);
-  }
-}

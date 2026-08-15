@@ -4,10 +4,17 @@ import 'package:flash/flash.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
-/// Timer Demo showcasing FTimer functionality.
-/// - A repeating timer spawns circles.
-/// - A one-shot timer changes color.
-/// - Visual countdown display.
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// [FTimer]: a node that counts down and emits a signal.
+///
+/// Being a node is the point — a timer is driven by the same `dt` as everything
+/// else, so it stops when the tree is paused and scales with slow motion,
+/// unlike a `dart:async` Timer.
+///
+/// One timer here repeats and spawns; the other is one-shot.
 class TimerDemo extends StatefulWidget {
   const TimerDemo({super.key});
 
@@ -16,212 +23,174 @@ class TimerDemo extends StatefulWidget {
 }
 
 class _TimerDemoState extends State<TimerDemo> {
+  static const int _maxCircles = 20;
+
   final List<_SpawnedCircle> _circles = [];
-  final Random _rnd = Random();
+  final Random _random = Random(19);
 
-  // Timer references
   FTimer? _spawnTimer;
-  FTimer? _flashTimer;
+  FTimer? _oneShotTimer;
+  FEngine? _engine;
 
-  // State for UI
-  final ValueNotifier<double> spawnTimerProgress = ValueNotifier(0.0);
-  final ValueNotifier<int> spawnCount = ValueNotifier(0);
-  final ValueNotifier<Color> flashColor = ValueNotifier(Colors.cyanAccent);
-  final ValueNotifier<String> flashStatus = ValueNotifier("Waiting...");
+  // Per-frame readouts go through notifiers rather than setState, so a
+  // countdown ticking at 60 Hz does not rebuild the scene with it.
+  final ValueNotifier<double> _spawnProgress = ValueNotifier(0);
+  final ValueNotifier<String> _oneShotStatus = ValueNotifier('waiting');
+  final ValueNotifier<bool> _oneShotDone = ValueNotifier(false);
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  int _spawned = 0;
+  bool _paused = false;
 
   @override
   void dispose() {
-    spawnTimerProgress.dispose();
-    spawnCount.dispose();
-    flashColor.dispose();
-    flashStatus.dispose();
+    _spawnProgress.dispose();
+    _oneShotStatus.dispose();
+    _oneShotDone.dispose();
     super.dispose();
+  }
+
+  void _setup(FEngine engine) {
+    if (_engine != null) return;
+    _engine = engine;
+
+    _spawnTimer = FTimer(name: 'SpawnTimer', waitTime: 1.5, oneShot: false, autoStart: true)
+      ..timeout.connect((_) => _spawn());
+    engine.scene.addChild(_spawnTimer!);
+
+    _oneShotTimer = FTimer(name: 'OneShot', waitTime: 3.0, oneShot: true, autoStart: true)
+      ..timeout.connect((_) {
+        _oneShotDone.value = true;
+        _oneShotStatus.value = 'fired';
+      });
+    engine.scene.addChild(_oneShotTimer!);
+
+    // Registered once, from onReady. Doing this from build() would add a
+    // listener per rebuild.
+    engine.addUpdateListener((dt) {
+      final spawn = _spawnTimer;
+      if (spawn != null && spawn.isRunning) {
+        _spawnProgress.value = 1.0 - (spawn.timeLeft / spawn.waitTime);
+      }
+      final once = _oneShotTimer;
+      if (once != null && once.isRunning) {
+        _oneShotStatus.value = '${once.timeLeft.toStringAsFixed(1)}s left';
+      }
+    });
+  }
+
+  void _spawn() {
+    if (!mounted) return;
+    setState(() {
+      if (_circles.length >= _maxCircles) _circles.removeAt(0);
+      _circles.add(
+        _SpawnedCircle(
+          position: v.Vector3(
+            (_random.nextDouble() - 0.5) * 500,
+            (_random.nextDouble() - 0.5) * 320,
+            0,
+          ),
+          radius: 10 + _random.nextDouble() * 20,
+          color: HSLColor.fromAHSL(1, _random.nextDouble() * 360, 0.7, 0.6).toColor(),
+        ),
+      );
+      _spawned++;
+    });
+  }
+
+  void _restart() {
+    setState(() {
+      _circles.clear();
+      _spawned = 0;
+    });
+    _oneShotDone.value = false;
+    _oneShotStatus.value = 'waiting';
+    _spawnTimer?.start();
+    _oneShotTimer?.start();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[900],
-      body: FScene(
-        autoUpdate: true,
-        onReady: _setupScene,
-        // Flash scene (Z-sorted automatically)
-        scene: [
-          FCamera(position: v.Vector3(0, 0, 500), fov: 60),
-          ..._circles.map((c) => FCircle(position: c.position.clone(), radius: c.radius, color: c.color)),
-        ],
-        // Flutter UI overlay
-        overlay: [
-          // HUD
-          Positioned(
-            top: 60,
-            left: 20,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-              child: Column(
+    _engine?.tree.paused = _paused;
+
+    return DemoPage(
+      title: 'Timers',
+      subtitle: 'FTimer is a node, so it runs on the frame loop.',
+      controls: [
+        DemoButton(label: 'Restart both', icon: Icons.replay_rounded, onPressed: _restart),
+        DemoToggle(
+          label: 'Pause the tree',
+          value: _paused,
+          tint: DemoTheme.warning,
+          onChanged: (value) => setState(() => _paused = value),
+        ),
+        DemoPanel(
+          title: 'Repeating timer',
+          children: [
+            ValueListenableBuilder<double>(
+              valueListenable: _spawnProgress,
+              builder: (context, progress, _) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '⏱️ Timer Demo',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Spawn Timer Progress
-                  ValueListenableBuilder<double>(
-                    valueListenable: spawnTimerProgress,
-                    builder: (_, progress, _) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Spawn Timer: ${(progress * 100).toInt()}%',
-                          style: const TextStyle(color: Colors.orangeAccent),
-                        ),
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          width: 150,
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation(Colors.orangeAccent),
-                          ),
-                        ),
-                      ],
+                  Text('every 1.5 s', style: DemoTheme.body),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 5,
+                      backgroundColor: Colors.white12,
+                      valueColor: const AlwaysStoppedAnimation(DemoTheme.accent),
                     ),
-                  ),
-
-                  const SizedBox(height: 8),
-                  ValueListenableBuilder<int>(
-                    valueListenable: spawnCount,
-                    builder: (_, count, _) =>
-                        Text('Spawned: $count circles', style: const TextStyle(color: Colors.white70)),
-                  ),
-
-                  const SizedBox(height: 16),
-                  const Text('One-Shot Timer:', style: TextStyle(color: Colors.cyanAccent)),
-                  ValueListenableBuilder<String>(
-                    valueListenable: flashStatus,
-                    builder: (_, status, _) => Text(status, style: const TextStyle(color: Colors.white70)),
                   ),
                 ],
               ),
             ),
-          ),
-
-          // Flash indicator
-          Positioned(
-            top: 60,
-            right: 20,
-            child: ValueListenableBuilder<Color>(
-              valueListenable: flashColor,
-              builder: (_, color, _) => Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  boxShadow: [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 5)],
+          ],
+        ),
+        DemoPanel(
+          title: 'One-shot timer',
+          children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: _oneShotDone,
+              builder: (context, done, _) => ValueListenableBuilder<String>(
+                valueListenable: _oneShotStatus,
+                builder: (context, status, _) => Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: done ? DemoTheme.positive : DemoTheme.warning,
+                      ),
+                    ),
+                    const SizedBox(width: DemoTheme.gap),
+                    Text(status, style: DemoTheme.body),
+                  ],
                 ),
               ),
             ),
-          ),
-
-          // Back button
-          Positioned(
-            bottom: 40,
-            left: 20,
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-
-          // Restart button
-          Positioned(
-            bottom: 40,
-            right: 20,
-            child: ElevatedButton.icon(
-              onPressed: _restartTimers,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Restart'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: Colors.black),
-            ),
-          ),
+          ],
+        ),
+      ],
+      readouts: [DemoStat(label: 'Spawned', value: '$_spawned')],
+      hint: 'Pause the tree: both timers stop, because dt stops.',
+      scene: FScene(
+        onReady: _setup,
+        scene: [
+          FCamera(position: v.Vector3(0, 0, 500), fov: 60),
+          for (final circle in _circles)
+            FCircle(position: circle.position, radius: circle.radius, color: circle.color),
         ],
       ),
     );
   }
-
-  void _setupScene(FEngine engine) {
-    // 1. Repeating Spawn Timer (every 1.5 seconds)
-    _spawnTimer = FTimer(name: 'SpawnTimer', waitTime: 1.5, oneShot: false, autoStart: true);
-
-    _spawnTimer!.timeout.connect((_) {
-      // Spawn a random circle
-      final circle = _SpawnedCircle(
-        position: v.Vector3((_rnd.nextDouble() - 0.5) * 300, (_rnd.nextDouble() - 0.5) * 200, 0),
-        radius: 10 + _rnd.nextDouble() * 20,
-        color: Color.fromARGB(255, _rnd.nextInt(256), _rnd.nextInt(256), _rnd.nextInt(256)),
-      );
-
-      setState(() {
-        _circles.add(circle);
-        spawnCount.value++;
-
-        // Keep max 20 circles
-        if (_circles.length > 20) {
-          _circles.removeAt(0);
-        }
-      });
-    });
-
-    engine.scene.addChild(_spawnTimer!);
-
-    // 2. One-Shot Flash Timer (3 seconds)
-    _flashTimer = FTimer(name: 'FlashTimer', waitTime: 3.0, oneShot: true, autoStart: true);
-
-    _flashTimer!.timeout.connect((_) {
-      flashColor.value = Colors.greenAccent;
-      flashStatus.value = "✓ Completed!";
-    });
-
-    engine.scene.addChild(_flashTimer!);
-
-    // Update progress in engine loop
-    engine.addUpdateListener((dt) {
-      if (_spawnTimer != null && _spawnTimer!.isRunning) {
-        spawnTimerProgress.value = 1.0 - (_spawnTimer!.timeLeft / _spawnTimer!.waitTime);
-      }
-
-      if (_flashTimer != null && _flashTimer!.isRunning) {
-        flashStatus.value = "⏳ ${_flashTimer!.timeLeft.toStringAsFixed(1)}s remaining";
-      }
-    });
-  }
-
-  void _restartTimers() {
-    setState(() {
-      _circles.clear();
-      spawnCount.value = 0;
-      flashColor.value = Colors.cyanAccent;
-      flashStatus.value = "Waiting...";
-    });
-
-    _spawnTimer?.start();
-    _flashTimer?.start();
-  }
 }
 
 class _SpawnedCircle {
+  const _SpawnedCircle({required this.position, required this.radius, required this.color});
+
   final v.Vector3 position;
   final double radius;
   final Color color;
-
-  _SpawnedCircle({required this.position, required this.radius, required this.color});
 }
