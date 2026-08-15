@@ -1,6 +1,5 @@
 import 'package:flash/src/core/graph/node.dart';
 import 'package:flash/src/core/graph/signal.dart';
-import 'package:flash/src/core/native/physics_ids.dart';
 import 'package:flash/src/core/systems/physics.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;

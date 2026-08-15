@@ -197,22 +197,8 @@ class PlayerNode extends FPhysicsBody {
 }
 
 class ObstacleNode extends FPhysicsBody {
-  ObstacleNode({
-    required super.world,
-    required double x,
-    required double y,
-    required double width,
-    required double height,
-  }) : super(
-         name: 'Obstacle',
-         type: FPhysics.staticBody,
-         shapeType: FPhysics.box,
-         x: x,
-         y: y,
-         width: width,
-         height: height,
-         color: Colors.deepOrange,
-       ) {
+  ObstacleNode({required super.world, required super.x, required super.y, required super.width, required super.height})
+    : super(name: 'Obstacle', type: FPhysics.staticBody, shapeType: FPhysics.box, color: Colors.deepOrange) {
     debugDraw = true;
   }
 }

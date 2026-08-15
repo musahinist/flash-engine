@@ -87,9 +87,9 @@ class FPainter extends CustomPainter {
       // Get vertex multiplier based on shape
       int vCount = 6;
       final shape = emitter.shapeType;
-      if (shape == 1)
+      if (shape == 1) {
         vCount = 12; // Hexagon
-      else if (shape == 2)
+      } else if (shape == 2)
         vCount = 18; // Octagon
       else if (shape == 3)
         vCount = 30; // 12-sided (Round)

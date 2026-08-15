@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../native/physics_joints_ffi.dart';
-import '../native/physics_ids.dart';
 import 'physics.dart'; // Import physics system directly to ensure visibility
 
 /// Joint types matching C++ enum

@@ -40,6 +40,7 @@ class HudOverlay extends StatelessWidget {
                 if (state.isTimeMode) _buildTimeCard(state.timeRemaining),
               ],
             ),
+
             const SizedBox(height: 8),
             // Active power-ups row
             if (state.activePowerUps.isNotEmpty)

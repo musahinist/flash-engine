@@ -77,7 +77,7 @@ class _TimerDemoState extends State<TimerDemo> {
                   // Spawn Timer Progress
                   ValueListenableBuilder<double>(
                     valueListenable: spawnTimerProgress,
-                    builder: (_, progress, __) => Column(
+                    builder: (_, progress, _) => Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -100,7 +100,7 @@ class _TimerDemoState extends State<TimerDemo> {
                   const SizedBox(height: 8),
                   ValueListenableBuilder<int>(
                     valueListenable: spawnCount,
-                    builder: (_, count, __) =>
+                    builder: (_, count, _) =>
                         Text('Spawned: $count circles', style: const TextStyle(color: Colors.white70)),
                   ),
 
@@ -108,7 +108,7 @@ class _TimerDemoState extends State<TimerDemo> {
                   const Text('One-Shot Timer:', style: TextStyle(color: Colors.cyanAccent)),
                   ValueListenableBuilder<String>(
                     valueListenable: flashStatus,
-                    builder: (_, status, __) => Text(status, style: const TextStyle(color: Colors.white70)),
+                    builder: (_, status, _) => Text(status, style: const TextStyle(color: Colors.white70)),
                   ),
                 ],
               ),
@@ -121,7 +121,7 @@ class _TimerDemoState extends State<TimerDemo> {
             right: 20,
             child: ValueListenableBuilder<Color>(
               valueListenable: flashColor,
-              builder: (_, color, __) => Container(
+              builder: (_, color, _) => Container(
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
