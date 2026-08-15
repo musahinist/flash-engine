@@ -140,14 +140,14 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
                     position: v.Vector3(0, i * 100.0, 0),
                     width: 1000,
                     height: 1,
-                    color: Colors.cyan.withOpacity(0.05),
+                    color: Colors.cyan.withValues(alpha: 0.05),
                   ),
                   // Vertical lines
                   FBox(
                     position: v.Vector3(i * 100.0, 0, 0),
                     width: 1,
                     height: 1000,
-                    color: Colors.cyan.withOpacity(0.05),
+                    color: Colors.cyan.withValues(alpha: 0.05),
                   ),
                 ],
               ],
@@ -179,7 +179,7 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
                 Text(
                   'DYNAMIC POINT LIGHT SHADOWS',
                   style: TextStyle(
-                    color: Colors.amberAccent.withOpacity(0.7),
+                    color: Colors.amberAccent.withValues(alpha: 0.7),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 2,
@@ -213,7 +213,7 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
                         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                         decoration: BoxDecoration(
-                          color: isSelected ? Colors.cyanAccent.withOpacity(0.2) : Colors.transparent,
+                          color: isSelected ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: isSelected ? Colors.cyanAccent : Colors.transparent),
                         ),
@@ -257,7 +257,7 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
                         gradient: const LinearGradient(colors: [Color(0xFFFFD54F), Color(0xFFFF8F00)]),
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
-                          BoxShadow(color: Colors.amberAccent.withOpacity(0.4), blurRadius: 20, spreadRadius: -5),
+                          BoxShadow(color: Colors.amberAccent.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: -5),
                         ],
                       ),
                       child: Row(

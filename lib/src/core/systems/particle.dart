@@ -1,11 +1,10 @@
 import 'dart:ui';
 
-import 'package:meta/meta.dart' show visibleForTesting;
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../graph/node.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import '../native/flash_native_bindings.dart' as native;
 import '../native/flash_native_bindings.dart' show NativeParticle, ParticleEmitter;
 import '../native/flash_native.dart';

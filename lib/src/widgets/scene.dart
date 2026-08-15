@@ -108,7 +108,7 @@ class _FSceneState extends State<FScene> {
             return Stack(
               children: [
                 SizedBox.expand(child: Stack(children: widget.scene ?? const [])),
-                if (overlayStack != null) overlayStack,
+                ?overlayStack,
               ],
             );
           }
@@ -140,7 +140,7 @@ class _FSceneState extends State<FScene> {
                   ),
                 ),
                 // Overlay layer - static, doesn't rebuild
-                if (overlayStack != null) overlayStack,
+                ?overlayStack,
               ],
             );
           }
@@ -149,7 +149,7 @@ class _FSceneState extends State<FScene> {
           return Stack(
             children: [
               SizedBox.expand(child: Stack(children: widget.scene ?? const [])),
-              if (overlayStack != null) overlayStack,
+              ?overlayStack,
             ],
           );
         },

@@ -35,35 +35,26 @@ class _FCircleState extends FNodeWidgetState<FCircle, _CircleNode> {
 }
 
 class _CircleNode extends FNode {
-  _CircleNode({required double radius, required Color color})
-    : _radius = radius,
-      _color = color;
+  _CircleNode({required this.radius, required this.color});
 
-  double _radius;
-  Color _color;
+  double radius;
+  Color color;
 
   // Rebuilt only when the colour changes, rather than allocated every frame.
+  // The check lives in draw() rather than in a setter, so a caller writing the
+  // same colour repeatedly costs nothing either way.
   final Paint _paint = Paint();
   Color? _paintColor;
 
-  double get radius => _radius;
-  set radius(double value) {
-    if (_radius == value) return;
-    _radius = value;
-  }
-
-  Color get color => _color;
-  set color(Color value) => _color = value;
-
   @override
-  Rect? get bounds => Rect.fromCircle(center: Offset.zero, radius: _radius);
+  Rect? get bounds => Rect.fromCircle(center: Offset.zero, radius: radius);
 
   @override
   void draw(Canvas canvas) {
-    if (_paintColor != _color) {
-      _paintColor = _color;
-      _paint.color = _color;
+    if (_paintColor != color) {
+      _paintColor = color;
+      _paint.color = color;
     }
-    canvas.drawCircle(Offset.zero, _radius, _paint);
+    canvas.drawCircle(Offset.zero, radius, _paint);
   }
 }

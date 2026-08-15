@@ -159,7 +159,7 @@ class FHudBar extends StatelessWidget {
             const Spacer(),
 
             // Center
-            if (center != null) center!,
+            ?center,
 
             const Spacer(),
 

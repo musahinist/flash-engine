@@ -348,8 +348,8 @@ class FNode {
 
       renderMatrix
         ..setFrom(viewportProjectionMatrix)
-        ..translate(w[12], w[13], w[14])
-        ..scale(avgScale, avgScale, avgScale);
+        ..translateByDouble(w[12], w[13], w[14], 1)
+        ..scaleByDouble(avgScale, avgScale, avgScale, 1);
     } else {
       // `setFrom` + `multiply` rather than `*`: Matrix4's operator is
       // `dynamic operator *(dynamic)`, so it allocates a Matrix4 (object plus

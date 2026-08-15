@@ -177,7 +177,7 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
       sizeMin: isTriangleMode ? 2.0 : 4.0,
       sizeMax: isTriangleMode ? 4.0 : 8.0,
       startColor: Colors.cyanAccent,
-      endColor: Colors.purpleAccent.withOpacity(0),
+      endColor: Colors.purpleAccent.withValues(alpha: 0),
       spreadAngle: 3.14159,
       shapeType: _currentShape,
     );
@@ -205,10 +205,10 @@ class _NativeParticleDemoState extends State<NativeParticleDemo> {
       width: 180,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+        color: color.withValues(alpha: 0.1),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
         borderRadius: BorderRadius.circular(8),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.05), blurRadius: 10, spreadRadius: 1)],
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.05), blurRadius: 10, spreadRadius: 1)],
       ),
       child: Center(
         child: Text(

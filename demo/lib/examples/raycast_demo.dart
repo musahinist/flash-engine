@@ -55,8 +55,6 @@ class _RayCastDemoState extends State<RayCastDemo> {
                 final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
 
                 if (engine != null && player == null) {
-                  print("Initializing RayCast Demo Scene...");
-
                   final camera = FCameraNode(name: 'MainCam');
                   camera.transform.position.z = 500;
                   engine.scene.addChild(camera);

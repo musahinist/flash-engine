@@ -429,7 +429,7 @@ class FSoftBody extends FNode {
   void draw(Canvas canvas) {
     // Basic debug draw
     final paint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.5)
+      ..color = Colors.cyanAccent.withValues(alpha: 0.5)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 

@@ -63,7 +63,7 @@ class FJointNode extends FNode {
     if (a == null || b == null) return;
 
     final paint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.6)
+      ..color = Colors.cyanAccent.withValues(alpha: 0.6)
       ..strokeWidth = 4.0
       ..style = PaintingStyle.stroke;
 

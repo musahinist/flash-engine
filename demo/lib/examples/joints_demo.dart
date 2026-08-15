@@ -204,7 +204,7 @@ class _JointsDemoExampleState extends State<JointsDemoExample> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.black45,
-                border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Column(
@@ -243,7 +243,7 @@ class _GlowNode extends StatelessWidget {
           height: radius * 3,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 30, spreadRadius: 10)],
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 30, spreadRadius: 10)],
           ),
         ),
         // Neon Ring
@@ -253,7 +253,7 @@ class _GlowNode extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 2),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.8), blurRadius: 15, spreadRadius: 2)],
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 15, spreadRadius: 2)],
           ),
         ),
         // Hot Core
@@ -288,7 +288,7 @@ class _NeonGear extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: color, width: 4),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)],
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 15, spreadRadius: 2)],
           ),
         ),
         // Inner detail ring
@@ -297,14 +297,14 @@ class _NeonGear extends StatelessWidget {
           height: size * 0.7,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: color.withOpacity(0.5), width: 1),
+            border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
           ),
         ),
         // Mechanical spokes
         for (int i = 0; i < 4; i++)
           Transform.rotate(
             angle: (i * math.pi / 4),
-            child: Container(width: size, height: 2, color: color.withOpacity(0.6)),
+            child: Container(width: size, height: 2, color: color.withValues(alpha: 0.6)),
           ),
         // Glowing Hub
         Container(
@@ -332,7 +332,7 @@ class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.05)
+      ..color = Colors.cyanAccent.withValues(alpha: 0.05)
       ..strokeWidth = 1.0;
 
     for (double i = 0; i < size.width; i += 50) {

@@ -54,7 +54,7 @@ class _BoxNode extends FNode {
     // Shared shading, so a box and a sphere under the same lights agree.
     final brightness = FLighting.brightness(worldMatrix.forward.normalized(), worldPosition, lights);
 
-    // Update paint - use withOpacity for better compatibility and simplicity
+    // Rebuilt only when colour or opacity changes, not every frame.
     if (color != _lastColor || brightness != _lastBrightness) {
       _lastColor = color;
       _lastBrightness = brightness;

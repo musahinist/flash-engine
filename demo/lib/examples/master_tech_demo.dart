@@ -13,11 +13,6 @@ class GameController extends FNode {
 
   GameController() : super(name: 'GameController');
 
-  @override
-  void ready() {
-    print('GameController Ready!');
-  }
-
   void addScore(int amount) {
     score += amount;
     scoreChanged.emit(score);
@@ -52,8 +47,6 @@ class Coin extends FPhysicsBody {
   }
 
   void collect() {
-    print('Coin collected!');
-
     if (parent is GameController) {
       (parent as GameController).addScore(10);
     } else {
@@ -149,61 +142,58 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
                 final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
 
                 if (engine != null && !engine.scene.children.contains(gameController)) {
-                  if (!engine.scene.children.contains(gameController)) {
-                    print("Initializing Demo Scene...");
-                    engine.scene.addChild(gameController);
+                  engine.scene.addChild(gameController);
 
-                    // Add Camera logic
-                    final camera = FCameraNode(name: 'MainCam');
-                    camera.transform.position.z = 500;
-                    engine.scene.addChild(camera);
-                    engine.registerCamera(camera);
+                  // Add Camera logic
+                  final camera = FCameraNode(name: 'MainCam');
+                  camera.transform.position.z = 500;
+                  engine.scene.addChild(camera);
+                  engine.registerCamera(camera);
 
-                    final world = physicsSystem.world;
+                  final world = physicsSystem.world;
 
-                    // Create Player
-                    final player = PlayerController(world: world);
-                    player.transform.position.setValues(0, 0, 0);
-                    gameController.addChild(player);
+                  // Create Player
+                  final player = PlayerController(world: world);
+                  player.transform.position.setValues(0, 0, 0);
+                  gameController.addChild(player);
 
-                    // Input Listener override
-                    engine.addUpdateListener((dt) {
-                      final input = engine.input;
-                      double dx = 0;
-                      double dy = 0;
+                  // Input Listener override
+                  engine.addUpdateListener((dt) {
+                    final input = engine.input;
+                    double dx = 0;
+                    double dy = 0;
 
-                      // Keyboard Input
-                      // Physics is Y-Up. W (Up) -> +Y. S (Down) -> -Y.
-                      if (input.isKeyPressed(LogicalKeyboardKey.keyW)) dy += 1;
-                      if (input.isKeyPressed(LogicalKeyboardKey.keyS)) dy -= 1;
-                      if (input.isKeyPressed(LogicalKeyboardKey.keyA)) dx -= 1;
-                      if (input.isKeyPressed(LogicalKeyboardKey.keyD)) dx += 1;
+                    // Keyboard Input
+                    // Physics is Y-Up. W (Up) -> +Y. S (Down) -> -Y.
+                    if (input.isKeyPressed(LogicalKeyboardKey.keyW)) dy += 1;
+                    if (input.isKeyPressed(LogicalKeyboardKey.keyS)) dy -= 1;
+                    if (input.isKeyPressed(LogicalKeyboardKey.keyA)) dx -= 1;
+                    if (input.isKeyPressed(LogicalKeyboardKey.keyD)) dx += 1;
 
-                      // Joystick Input
-                      // Joystick gives Screen Coords (Up = -Y, Down = +Y).
-                      // We need Physics Coords (Up = +Y, Down = -Y).
-                      // So we must invert Y.
-                      dx += joystickInput.x;
-                      dy -= joystickInput.y; // Invert Y
+                    // Joystick Input
+                    // Joystick gives Screen Coords (Up = -Y, Down = +Y).
+                    // We need Physics Coords (Up = +Y, Down = -Y).
+                    // So we must invert Y.
+                    dx += joystickInput.x;
+                    dy -= joystickInput.y; // Invert Y
 
-                      if (dx != 0 || dy != 0) {
-                        player.setVelocity(dx * player.speed, dy * player.speed);
-                      } else {
-                        player.setVelocity(0, 0); // Stop instantly when input release
-                      }
-                    });
-
-                    // Create Coins
-                    final rnd = Random();
-                    for (int i = 0; i < 15; i++) {
-                      final x = (rnd.nextDouble() - 0.5) * 500;
-                      final y = (rnd.nextDouble() - 0.5) * 800; // Wider spread
-
-                      // Need to set position via Constructor, because _syncFromPhysics will overwrite transform
-                      // if we rely on transform.position setting later.
-                      final coin = Coin(world: world, x: x, y: y);
-                      gameController.addChild(coin);
+                    if (dx != 0 || dy != 0) {
+                      player.setVelocity(dx * player.speed, dy * player.speed);
+                    } else {
+                      player.setVelocity(0, 0); // Stop instantly when input release
                     }
+                  });
+
+                  // Create Coins
+                  final rnd = Random();
+                  for (int i = 0; i < 15; i++) {
+                    final x = (rnd.nextDouble() - 0.5) * 500;
+                    final y = (rnd.nextDouble() - 0.5) * 800; // Wider spread
+
+                    // Need to set position via Constructor, because _syncFromPhysics will overwrite transform
+                    // if we rely on transform.position setting later.
+                    final coin = Coin(world: world, x: x, y: y);
+                    gameController.addChild(coin);
                   }
                 }
                 return const SizedBox.shrink();
