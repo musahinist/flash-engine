@@ -15,7 +15,6 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// This walks the real catalogue rather than a hand-kept list, so a demo added
 /// to `main.dart` is covered without anyone remembering to add it here.
-library;
 
 /// The engine behind whatever demo is currently mounted.
 FEngine? _engineOf(WidgetTester tester) {
