@@ -203,10 +203,14 @@ abstract class FTween<T> {
   void update(double dt) {
     if (_state != TweenState.running) return;
 
-    // Handle delay
+    // Handle delay. The frame that crosses the boundary carries its remainder
+    // into the tween rather than being swallowed whole, so a long frame does
+    // not push the start time out by up to a full dt.
     if (_delayElapsed < delay) {
       _delayElapsed += dt;
-      return;
+      final overshoot = _delayElapsed - delay;
+      if (overshoot <= 0) return;
+      dt = overshoot;
     }
 
     _elapsed += dt;

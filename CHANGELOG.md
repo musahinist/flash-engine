@@ -76,7 +76,7 @@ demos are migrated in the same commit.
 - README rewritten. The previous one documented fifteen classes that no longer
   existed and a physics API built on removed Forge2D types; not one line of it
   compiled. Every sample is now covered by a test.
-- Tests: 11 → 96. New coverage for the FFI ABI (struct sizes and field
+- Tests: 11 → 109. New coverage for the FFI ABI (struct sizes and field
   offsets), graceful degradation, process modes, camera behaviour, grid maths
   and the widget layer.
 

@@ -1,11 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flash/src/core/graph/node.dart';
-import 'package:flash/src/core/graph/tree.dart';
-import 'package:flash/src/core/graph/signal.dart';
-import 'package:flash/src/core/systems/engine.dart';
+import 'package:flash/flash.dart';
 
 void main() {
-  final engine = FEngine();
+  // Was a single top-level FEngine shared by every test and never disposed,
+  // which leaked a native scene and let state bleed between tests.
+  late FEngine engine;
+  setUp(() => engine = FEngine());
+  tearDown(() => engine.dispose());
+
   group('FSignal', () {
     test('emit notifies listeners', () {
       final signal = FSignal<int>();
