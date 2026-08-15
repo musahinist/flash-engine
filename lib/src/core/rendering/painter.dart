@@ -34,7 +34,7 @@ class FPainter extends CustomPainter {
 
     // Z-Sorting (Painter's Algorithm: Back-to-Front)
     // Draw distant objects (Low Z) first, then close objects (High Z) on top.
-    flatList.sort((a, b) {
+    engine.profiler.section('paint.sort', () => flatList.sort((a, b) {
       // 1. Explicit layer wins, so backgrounds stay behind regardless of depth.
       final layer = a.sortLayer.compareTo(b.sortLayer);
       if (layer != 0) return layer;
@@ -47,16 +47,20 @@ class FPainter extends CustomPainter {
       // which is not stable between runs, so co-planar objects could swap
       // draw order from one launch to the next.
       return a.creationIndex.compareTo(b.creationIndex);
+    }));
+
+    engine.profiler.section('paint.nodes', () {
+      for (final node in flatList) {
+        node.renderSelf(canvas, cameraMatrix, lights);
+      }
     });
 
-    for (final node in flatList) {
-      node.renderSelf(canvas, cameraMatrix, lights);
-    }
-
     // Render particles (after regular nodes for proper layering)
-    for (final emitter in emitters) {
-      _renderParticles(canvas, cameraMatrix, emitter);
-    }
+    engine.profiler.section('paint.particles', () {
+      for (final emitter in emitters) {
+        _renderParticles(canvas, cameraMatrix, emitter);
+      }
+    });
   }
 
   // Scratch buffers the native vertex builder writes into.

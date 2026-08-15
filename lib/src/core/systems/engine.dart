@@ -14,6 +14,7 @@ import '../native/flash_native_bindings.dart' as native;
 import '../native/flash_native_bindings.dart' show NativeScene;
 import '../native/flash_native.dart';
 import 'audio.dart';
+import 'profiler.dart';
 import 'input.dart';
 import 'scene_manager.dart';
 import 'tween.dart';
@@ -26,6 +27,9 @@ class FEngine extends ChangeNotifier {
   final FInputSystem input = FInputSystem();
   final FSceneManager sceneManager = FSceneManager();
   final FTweenManager tweenManager = FTweenManager();
+
+  /// Per-section frame timing. Disabled by default; see [FProfiler].
+  final FProfiler profiler = FProfiler();
 
   /// Native transform hierarchy, or `null` when the native core is
   /// unavailable. Tier 0: the scene graph keeps working either way — [FNode]
@@ -149,12 +153,25 @@ class FEngine extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Runs one frame with an explicit delta, bypassing the Ticker.
+  ///
+  /// Benchmarks and tests need to drive the loop faster than vsync; without
+  /// this the only way in was a real Ticker, which pins measurement to the
+  /// display refresh.
+  @visibleForTesting
+  void debugTick(double dt) => _runFrame(dt, elapsed + dt);
+
   void _tick(Duration elapsedDuration) {
+    final currentTime = elapsedDuration.inMicroseconds / Duration.microsecondsPerSecond;
+    _runFrame(currentTime - _lastTime, currentTime);
+  }
+
+  void _runFrame(double dt, double currentTime) {
+    profiler.beginFrame();
+
     // Clear "justPressed/justReleased" states from previous frame
     input.beginFrame();
 
-    final currentTime = elapsedDuration.inMicroseconds / Duration.microsecondsPerSecond;
-    final dt = currentTime - _lastTime;
     _lastTime = currentTime;
     elapsed = currentTime; // Expose total elapsed time
     tickerCount++;
@@ -168,21 +185,23 @@ class FEngine extends ChangeNotifier {
     }
 
     // Process the SceneTree (lifecycle updates)
-    tree.process(dt);
+    profiler.section('tree', () => tree.process(dt));
 
     // Pausing the tree has to pause the simulation with it. These three used
     // to keep running regardless, so a "paused" game still had physics
     // settling and tweens finishing underneath the pause menu.
     if (!tree.paused) {
-      physicsWorld?.update(dt);
-      sceneManager.update(dt);
-      tweenManager.update(dt);
+      profiler.section('physics', () {
+        physicsWorld?.update(dt);
+        sceneManager.update(dt);
+        tweenManager.update(dt);
+      });
     }
 
     // Update Native Transforms Hierarchy
     final nativeScenePtr = _nativeScene;
     if (nativeScenePtr != null) {
-      native.updateSceneTransforms(nativeScenePtr);
+      profiler.section('transforms', () => native.updateSceneTransforms(nativeScenePtr));
     }
 
     // Use first visible registered camera (O(1) instead of O(n) tree traversal)
@@ -191,8 +210,10 @@ class FEngine extends ChangeNotifier {
     // Update Audio Listener
     audio.updateListener(activeCamera!);
 
-    _updateTileMaps();
-    _prepareRender();
+    profiler.section('tilemaps', _updateTileMaps);
+    profiler.section('prepareRender', _prepareRender);
+
+    profiler.endFrame();
 
     notifyListeners();
 
