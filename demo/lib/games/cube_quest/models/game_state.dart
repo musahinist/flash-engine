@@ -2,7 +2,7 @@
 library;
 
 import 'dart:math' as math;
-import 'collectible.dart';
+import '../../shared/collectible.dart';
 import 'enemy.dart';
 
 /// Complete game state

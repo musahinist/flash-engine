@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../models/collectible.dart';
+import '../../shared/collectible.dart';
 
 /// Widget for rendering power-ups on the grid
 class PowerUpWidget extends StatefulWidget {

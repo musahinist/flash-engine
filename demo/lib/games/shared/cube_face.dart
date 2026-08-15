@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Cube face widget (reused from original cube game)
+/// A single cube face. Shared by the cube games, which held identical copies.
 class CubeFace extends StatelessWidget {
   final Color color;
   final double size;

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../models/collectible.dart';
+import 'collectible.dart';
 
 /// Widget for rendering different collectible types
 class CollectibleWidget extends StatefulWidget {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flash/flash.dart' show FComboDisplay, FPowerUpIndicator;
 import '../models/game_state.dart';
-import 'combo_display.dart';
 
 /// HUD overlay for game stats
 class HudOverlay extends StatelessWidget {
@@ -51,7 +51,7 @@ class HudOverlay extends StatelessWidget {
                   children: state.activePowerUps.entries
                       .where((e) => DateTime.now().isBefore(e.value))
                       .map(
-                        (e) => ActivePowerUpIndicator(
+                        (e) => FPowerUpIndicator(
                           name: e.key.name,
                           color: e.key.color,
                           remaining: e.value.difference(DateTime.now()),
@@ -62,7 +62,7 @@ class HudOverlay extends StatelessWidget {
               ),
             const Spacer(),
             // Combo display (centered)
-            if (state.comboMultiplier > 1) ComboDisplay(multiplier: state.comboMultiplier, count: state.comboCount),
+            if (state.comboMultiplier > 1) FComboDisplay(multiplier: state.comboMultiplier, count: state.comboCount),
             const SizedBox(height: 60),
             // Keys collected
             if (state.keysCollected > 0)

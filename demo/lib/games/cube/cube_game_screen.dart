@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../shared/cube_face.dart';
+import '../shared/face_def.dart';
+import 'package:flash/flash.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
-import 'models/face_def.dart';
 import 'painters/grid_painter.dart';
-import 'ui/cube_face.dart';
-import 'ui/diamond_widget.dart';
 
 class CubeGameScreen extends StatefulWidget {
   const CubeGameScreen({super.key});
@@ -449,7 +449,7 @@ class _CubeGameScreenState extends State<CubeGameScreen> with TickerProviderStat
             ..multiply(worldToCamera)
             ..translateByVector3(worldPos);
 
-          widgets.add(Transform(transform: fullMatrix, alignment: Alignment.center, child: const DiamondWidget()));
+          widgets.add(Transform(transform: fullMatrix, alignment: Alignment.center, child: const FFloatingItem(child: FDiamondWidget())));
         }
       }
     }

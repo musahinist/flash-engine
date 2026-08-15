@@ -18,14 +18,14 @@ class GamesCatalog extends StatelessWidget {
       ),
       _GameData(
         title: 'CubeQuest',
-        description: 'Collect gems, dodge enemies, use power-ups!',
+        description: 'Collect gems, dodge enemies, use power-ups. Plain Flutter.',
         icon: Icons.sports_esports_rounded,
         color: const Color(0xFF1A0A47),
         builder: (_) => const CubeQuestScreen(),
       ),
       _GameData(
         title: 'Cube Roller',
-        description: 'Roll & jump across infinite isometric grid.',
+        description: 'Roll & jump across an infinite isometric grid. Plain Flutter.',
         icon: Icons.view_in_ar_rounded,
         color: const Color(0xFF3A5A40),
         builder: (_) => const CubeGameScreen(),
@@ -65,7 +65,7 @@ class GamesCatalog extends StatelessWidget {
                           ).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          'Built with Flash Engine',
+                          'CubeRunner uses the engine; the other two are plain Flutter',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.cyanAccent),
                         ),
                       ],

@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../shared/cube_face.dart';
+import '../shared/face_def.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
-import 'models/face_def.dart';
-import 'models/collectible.dart';
+import '../shared/collectible.dart';
 import 'models/enemy.dart';
 import 'models/game_state.dart';
-import 'painters/enhanced_grid_painter.dart';
-import 'ui/collectible_widget.dart';
+import '../shared/enhanced_grid_painter.dart';
+import '../shared/collectible_widget.dart';
 import 'ui/enemy_widget.dart';
 import 'ui/power_up_widget.dart';
-import 'ui/portal_widget.dart';
-import 'ui/cube_face.dart';
+import '../shared/portal_widget.dart';
 import 'ui/hud_overlay.dart';
 
 class CubeQuestScreen extends StatefulWidget {

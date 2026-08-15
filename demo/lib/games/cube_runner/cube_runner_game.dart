@@ -3,10 +3,10 @@ import 'package:flash/flash.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'enemy_face.dart';
-import '../cube_quest/models/collectible.dart' as cq;
-import '../cube_quest/ui/collectible_widget.dart';
-import '../cube_quest/ui/portal_widget.dart';
-import '../cube_quest/painters/enhanced_grid_painter.dart';
+import '../shared/collectible.dart' as cq;
+import '../shared/collectible_widget.dart';
+import '../shared/portal_widget.dart';
+import '../shared/enhanced_grid_painter.dart';
 
 /// CubeRunner game logic using Flash Engine systems
 class CubeRunnerGame extends ChangeNotifier {
