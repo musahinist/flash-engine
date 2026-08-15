@@ -1,3 +1,4 @@
+import 'package:demo/examples/solar_system.dart';
 import 'package:demo/main.dart';
 import 'package:demo/shared/demo_catalog.dart';
 import 'package:demo/shared/demo_theme.dart';
@@ -188,6 +189,46 @@ void main() {
       await tester.pump();
       tester.takeException();
     }
+  });
+
+  testWidgets('the control column does not swallow drags meant for the scene', (tester) async {
+    // The controls live in a scrollable, and a scrollable hit-tests its whole
+    // bounding box. That made the top-left corner dead for any demo whose
+    // interaction is dragging the scene — the gaps between panels and the
+    // strip beside them ate the gesture, so the demo looked broken rather than
+    // obstructed. Solar System is the clearest case: dragging orbits its
+    // camera, and dragging near the controls did nothing at all.
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(theme: DemoTheme.materialTheme(), home: const SolarSystemExample()),
+    );
+    for (int i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    final engine = _engineOf(tester)!;
+    double yaw() => engine.activeCamera!.transform.rotation.y;
+
+    Future<double> dragAt(Offset from) async {
+      final before = yaw();
+      await tester.dragFrom(from, const Offset(200, 0));
+      for (int i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      return (yaw() - before).abs();
+    }
+
+    expect(await dragAt(const Offset(700, 500)), greaterThan(0.1),
+        reason: 'a drag over open scene did nothing');
+    expect(await dragAt(const Offset(120, 265)), greaterThan(0.1),
+        reason: 'a drag in the gap between control panels was swallowed');
+    expect(await dragAt(const Offset(120, 600)), greaterThan(0.1),
+        reason: 'a drag below the controls was swallowed');
+
+    tester.takeException();
   });
 
   testWidgets('a demo page still shows its way back on a small window', (tester) async {

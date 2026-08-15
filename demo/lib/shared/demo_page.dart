@@ -87,6 +87,15 @@ class DemoPage extends StatelessWidget {
                         maxHeight: maxControlsHeight,
                       ),
                       child: SingleChildScrollView(
+                        // Without this the column swallowed every drag inside
+                        // its bounding box — including the gaps between
+                        // controls and the empty strip beside them. On a demo
+                        // whose whole interaction is dragging the scene, the
+                        // top-left corner was simply dead, and it looked like
+                        // the demo was broken rather than like a panel was in
+                        // the way. Deferring to the child means only the
+                        // controls themselves take the gesture.
+                        hitTestBehavior: HitTestBehavior.deferToChild,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
