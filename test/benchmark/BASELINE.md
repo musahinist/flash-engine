@@ -167,6 +167,66 @@ counts have not been measured — that needs a DevTools allocation profile
 against the running demo, not a stopwatch in a headless test. The wall-clock
 evidence above covers culling and the camera cache only.
 
+---
+
+# The paint path, and what it says about phase 4
+
+Phase 4 proposed moving culling, Z-sorting and the MVP multiply into
+`nodes.cpp`. The plan's own open question said to re-measure that payoff once
+phase 3 had cleaned up the Dart side, and narrow the scope if the gap came out
+smaller than expected. It did.
+
+`FPainter` never runs in the scenarios above — they have no `CustomPaint` — so
+the paint sections were blank. Driven directly against a real `Canvas`, 1000
+boxes with 993 surviving culling:
+
+| section | cost |
+|---|---|
+| tree | 0.035 ms |
+| prepareRender (culling) | 0.068 ms |
+| **paint.sort** | **0.148 ms** |
+| **paint.nodes** | **0.431 ms** |
+
+So the paint path is roughly six times culling, and it is where phase 4's case
+had to be made. Decomposing `paint.nodes` over the same 993 nodes:
+
+| part | cost | share | can it move to C++? |
+|---|---|---|---|
+| MVP multiply (`vp * world`) | 0.021 ms | **5.9%** | yes |
+| `canvas.save/transform/restore` | 0.148 ms | 42% | **no** — dart:ui |
+| `drawRect` | 0.184 ms | 52% | **no** — Skia |
+
+**The MVP multiply is 5.9% of the pass.** The plan treated it as one of phase
+4's main terms — the reason `build_render_list` had to return matrices rather
+than just indices. Ninety-four percent of `paint.nodes` is `Canvas` work that
+cannot cross the boundary in either direction, and the plan itself already ruled
+`draw(Canvas)` out of scope.
+
+That leaves the sort (0.148 ms) and part of culling (~0.03 ms) — about **0.18
+ms of a 0.69 ms frame** — as phase 4's real payoff, against ABI 1→3, a new
+translation unit, a dual-producer equivalence test, and migrating every
+primitive from `renderSelf` to `drawAt`.
+
+The sort in particular cannot be moved on its own. Passing 993 x (layer, z,
+index) out and a permutation back is ~20 KB crossed for ~10,000 comparisons of
+work — arithmetic intensity around 1, the exact anti-pattern this review is
+built on. It only earns C++ if those keys are *already* in the native node
+array, which is the full `NativeNode` expansion. The plan was right about why;
+it was wrong about how much.
+
+Cheap Dart wins the measurement did surface:
+
+- `setFrom` + `multiply` into a scratch matrix is **38.7% cheaper** than
+  `vp * world` and allocates nothing. `Matrix4 operator *` is
+  `dynamic operator *(dynamic)`, so it both allocates and cannot devirtualise.
+
+**Phase 4 is not being done as specified.** The remaining budget goes to the
+1M-particle target instead, where the engine is genuinely far from its stated
+goal: `fill_vertex_buffer` is 0.920 ms at 100k particles single-threaded, so
+about 9.2 ms at 1M — a whole 60 fps frame, spent in one function. The parallel
+path that would fix it is dead code today (threshold 100,000, and it spawns and
+joins eight `std::thread`s per frame when it does run).
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles

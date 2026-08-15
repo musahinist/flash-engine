@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flash/flash.dart';
 import 'package:flash/src/core/native/flash_native_bindings.dart' as native;
 import 'package:ffi/ffi.dart';
-import 'dart:ffi';
+import 'dart:ffi' hide Size;
+import 'dart:ui' as ui;
 import 'package:vector_math/vector_math_64.dart' as v;
 
 /// Frame-time baseline for the engine loop.
@@ -219,6 +220,46 @@ void main() {
       report('100k particles (active: ${emitter.activeCount})', engine);
     });
 
+    test('paint path: sort + per-node draw', () {
+      // FPainter never runs in the scenarios above, because they have no
+      // CustomPaint. It is where the Z sort and the per-node MVP multiply
+      // live, so it is the section that decides whether moving the render
+      // list into C++ is worth the ABI change. Driven directly here against a
+      // real Canvas.
+      final engine = FEngine()..profiler.enabled = true;
+      addTearDown(engine.dispose);
+      engine.viewportSize.setValues(1200, 800);
+
+      final camera = FCameraNode(name: 'cam');
+      engine.scene.addChild(camera);
+      engine.registerCamera(camera);
+
+      final rnd = Random(31);
+      for (int i = 0; i < 1000; i++) {
+        engine.scene.addChild(
+          _BenchBox(size: 40)
+            ..transform.position = v.Vector3(
+              (rnd.nextDouble() - 0.5) * 1600,
+              (rnd.nextDouble() - 0.5) * 1000,
+              (rnd.nextDouble() - 0.5) * 400,
+            ),
+        );
+      }
+
+      engine.debugTick(1 / 60);
+      final painter = FPainter(engine: engine, camera: engine.activeCamera);
+
+      const frames = 120;
+      for (int i = 0; i < frames; i++) {
+        engine.debugTick(1 / 60);
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), const Size(1200, 800));
+        recorder.endRecording().dispose();
+      }
+
+      report('paint path: 1000 boxes, ${engine.renderNodes.length} in render list', engine);
+    });
+
     test('particle vertex fill (paint path)', () {
       // fill_vertex_buffer is only reached through FPainter, which needs a real
       // CustomPaint — so the engine-loop scenarios above never touch it. This
@@ -282,4 +323,21 @@ void main() {
       expect(rendered, greaterThan(0));
     });
   });
+}
+
+
+/// Minimal bounded, drawable node for the paint benchmark.
+class _BenchBox extends FNode {
+  _BenchBox({required this.size}) : super(name: 'benchBox');
+
+  final double size;
+  final Paint _paint = Paint()..color = const Color(0xFF44AAFF);
+
+  @override
+  Rect? get bounds => Rect.fromCenter(center: Offset.zero, width: size, height: size);
+
+  @override
+  void draw(Canvas canvas) {
+    canvas.drawRect(Rect.fromCenter(center: Offset.zero, width: size, height: size), _paint);
+  }
 }
