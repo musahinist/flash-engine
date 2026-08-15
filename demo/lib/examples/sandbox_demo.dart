@@ -23,7 +23,6 @@ class _SandboxDemoExampleState extends State<SandboxDemoExample> {
   @override
   void initState() {
     super.initState();
-    FEngine.init();
     physicsSystem = FPhysicsSystem(gravity: v.Vector2(0, -900));
   }
 

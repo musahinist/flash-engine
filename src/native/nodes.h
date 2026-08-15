@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include "flash_export.h"
 
 extern "C" {
 
@@ -38,11 +39,11 @@ struct NativeScene {
     int freeCount;
 };
 
-NativeScene* create_native_scene(int maxNodes);
-void destroy_native_scene(NativeScene* scene);
-int32_t create_native_node(NativeScene* scene, int32_t parentId);
-void destroy_native_node(NativeScene* scene, int32_t nodeId);
-void update_scene_transforms(NativeScene* scene);
+FLASH_API NativeScene* create_native_scene(int maxNodes);
+FLASH_API void destroy_native_scene(NativeScene* scene);
+FLASH_API int32_t create_native_node(NativeScene* scene, int32_t parentId);
+FLASH_API void destroy_native_node(NativeScene* scene, int32_t nodeId);
+FLASH_API void update_scene_transforms(NativeScene* scene);
 
 }
 

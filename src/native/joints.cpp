@@ -12,7 +12,7 @@ static inline NativeBody* get_body(PhysicsWorld* world, uint32_t id) {
 }
 
 // Create joint
-int create_joint(PhysicsWorld* world, JointDef* def) {
+FLASH_API int create_joint(PhysicsWorld* world, JointDef* def) {
     if (!world || !def || world->activeBoxJoints >= world->maxBoxJoints) {
         return -1;
     }
@@ -77,7 +77,7 @@ int create_joint(PhysicsWorld* world, JointDef* def) {
     return jointId;
 }
 
-void destroy_joint(PhysicsWorld* world, int jointId) {
+FLASH_API void destroy_joint(PhysicsWorld* world, int jointId) {
     if (!world || jointId < 0 || jointId >= world->activeBoxJoints) return;
     
     // Swap with last joint and decrease count

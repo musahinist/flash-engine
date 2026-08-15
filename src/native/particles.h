@@ -2,6 +2,7 @@
 #define FLASH_PARTICLES_H
 
 #include <cstdint>
+#include "flash_export.h"
 
 extern "C" {
 
@@ -24,9 +25,9 @@ struct ParticleEmitter {
 };
 
 // Functions exported to Dart via FFI
-void update_particles(ParticleEmitter* emitter, float dt);
-void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color);
-int fill_vertex_buffer(ParticleEmitter* emitter, float* matrix, float* vertices, uint32_t* colors, int maxRenderCount);
+FLASH_API void update_particles(ParticleEmitter* emitter, float dt);
+FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color);
+FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* matrix, float* vertices, uint32_t* colors, int maxRenderCount);
 
 }
 

@@ -49,7 +49,7 @@ static inline uint64_t contact_cache_key(uint32_t bodyA, uint32_t bodyB, int poi
 
 extern "C" {
 
-PhysicsWorld* create_physics_world(int maxBodies) {
+FLASH_API PhysicsWorld* create_physics_world(int maxBodies) {
     // Use calloc to ensure all fields are zeroed (prevents uninitialized garbage)
     PhysicsWorld* world = (PhysicsWorld*)calloc(1, sizeof(PhysicsWorld));
     if (!world) return NULL;
@@ -95,7 +95,7 @@ PhysicsWorld* create_physics_world(int maxBodies) {
     return world;
 }
 
-void destroy_physics_world(PhysicsWorld* world) {
+FLASH_API void destroy_physics_world(PhysicsWorld* world) {
     if (!world) return;
 
     // Every block below is allocated with calloc() in create_physics_world /
@@ -310,7 +310,7 @@ CollisionManifold detectCircleBox(NativeBody& circle, NativeBody& box) {
 
 void step_soft_body(PhysicsWorld* world, float dt);
 
-void step_physics(PhysicsWorld* world, float dt) {
+FLASH_API void step_physics(PhysicsWorld* world, float dt) {
     if (!world || dt <= 0) return;
 
     // Step Soft Bodies
@@ -583,11 +583,11 @@ void step_physics(PhysicsWorld* world, float dt) {
 // Version handshake. Dart uses this as a cheap, side-effect-free probe to
 // decide whether the native core is available (see FlashNative.isAvailable).
 // Bump when the exported ABI changes.
-int32_t get_physics_version() {
+FLASH_API int32_t get_physics_version() {
     return FLASH_ABI_VERSION;
 }
 
-int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits) {
+FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits) {
     if (!world || world->activeCount >= world->maxBodies) return -1;
     
     int32_t id = world->activeCount++;
@@ -634,7 +634,7 @@ int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float
     return id;
 }
 
-int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness) {
+FLASH_API int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness) {
     if (!world || world->activeSoftBodies >= world->maxSoftBodies) return -1;
     
     int32_t id = world->activeSoftBodies++;
@@ -696,7 +696,7 @@ int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, f
     return id;
 }
 
-void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float* x, float* y) {
+FLASH_API void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float* x, float* y) {
     if (world && sbId >= 0 && sbId < world->activeSoftBodies) {
         NativeSoftBody& sb = world->softBodies[sbId];
         if (pointIdx >= 0 && pointIdx < sb.pointCount) {
@@ -706,7 +706,7 @@ void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float*
     }
 }
 
-void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y) {
+FLASH_API void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y) {
     if (!world || sbId < 0 || sbId >= world->activeSoftBodies) return;
     if (pointIdx < 0 || pointIdx >= world->softBodies[sbId].pointCount) return;
 
@@ -722,7 +722,7 @@ void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float 
     sb.points[pointIdx].vy = 0;
 }
 
-void set_soft_body_params(PhysicsWorld* world, int32_t sbId, float pressure, float stiffness) {
+FLASH_API void set_soft_body_params(PhysicsWorld* world, int32_t sbId, float pressure, float stiffness) {
     if (!world || sbId < 0 || sbId >= world->activeSoftBodies) return;
     
     NativeSoftBody& sb = world->softBodies[sbId];
@@ -927,7 +927,7 @@ void step_soft_body(PhysicsWorld* world, float dt) {
     }
 }
 
-void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy) {
+FLASH_API void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
         NativeBody& b = world->bodies[bodyId];
         b.forceX += fx;
@@ -937,7 +937,7 @@ void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy) {
     }
 }
 
-void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque) {
+FLASH_API void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
         NativeBody& b = world->bodies[bodyId];
         b.torque += torque;
@@ -946,7 +946,7 @@ void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque) {
     }
 }
 
-void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy) {
+FLASH_API void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
         NativeBody& b = world->bodies[bodyId];
         b.vx = vx;
@@ -956,7 +956,7 @@ void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy) 
     }
 }
 
-void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y) {
+FLASH_API void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y) {
     if (world && bodyId >= 0 && bodyId < world->activeCount) {
         *x = world->bodies[bodyId].x;
         *y = world->bodies[bodyId].y;
@@ -1046,7 +1046,7 @@ bool intersectRayAABB(float startX, float startY, float dx, float dy,
     return true;
 }
 
-RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, float endX, float endY) {
+FLASH_API RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, float endX, float endY) {
     RayCastHit closest;
     closest.hit = 0;
     closest.fraction = 1.0f;

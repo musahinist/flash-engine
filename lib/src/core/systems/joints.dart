@@ -2,16 +2,9 @@ import 'dart:ffi';
 import 'dart:math' as math;
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
-import '../native/physics_joints_ffi.dart';
+import '../native/flash_native_bindings.dart' as native;
+import '../native/flash_native_bindings.dart' show JointDef, JointType;
 import 'physics.dart'; // Import physics system directly to ensure visibility
-
-/// Joint types matching C++ enum
-class JointType {
-  static const int distance = 0;
-  static const int revolute = 1;
-  static const int prismatic = 2;
-  static const int weld = 3;
-}
 
 /// Base class for all joints
 abstract class FJoint {
@@ -27,10 +20,7 @@ abstract class FJoint {
   /// Destroy the joint
   void destroy(WorldId world) {
     if (_jointId != null && _jointId!.isValid) {
-      final ffi = FPhysicsSystem.jointsFFI;
-      if (ffi != null) {
-        ffi.destroyJoint(world, _jointId!);
-      }
+      native.destroyJoint(world, _jointId!);
       _jointId = null;
     }
   }
@@ -73,12 +63,6 @@ class FDistanceJointStructure extends FJoint {
   void create(WorldId world) {
     if (isCreated) return;
 
-    final ffi = FPhysicsSystem.jointsFFI;
-    if (ffi == null) {
-      print('⚠️  Joints FFI not available');
-      return;
-    }
-
     // Allocate JointDef
     final def = calloc<JointDef>();
     try {
@@ -93,7 +77,7 @@ class FDistanceJointStructure extends FJoint {
       def.ref.frequency = frequency;
       def.ref.dampingRatio = dampingRatio;
 
-      _jointId = ffi.createJoint(world, def);
+      _jointId = native.createJoint(world, def);
 
       if (_jointId!.isValid) {
         print('✅ Distance joint created: ID=$_jointId, length=${length.toStringAsFixed(1)}');
@@ -132,12 +116,6 @@ class FRevoluteJointStructure extends FJoint {
   void create(WorldId world) {
     if (isCreated) return;
 
-    final ffi = FPhysicsSystem.jointsFFI;
-    if (ffi == null) {
-      print('⚠️  Joints FFI not available for Revolute Joint');
-      return;
-    }
-
     final def = calloc<JointDef>();
     try {
       def.ref.type = JointType.revolute;
@@ -153,7 +131,7 @@ class FRevoluteJointStructure extends FJoint {
       def.ref.lowerAngle = lowerAngle;
       def.ref.upperAngle = upperAngle;
 
-      _jointId = ffi.createJoint(world, def);
+      _jointId = native.createJoint(world, def);
       print('🔄 Revolute Joint Created: ID=$_jointId');
     } finally {
       calloc.free(def);
@@ -187,12 +165,6 @@ class FPrismaticJointStructure extends FJoint {
   void create(WorldId world) {
     if (isCreated) return;
 
-    final ffi = FPhysicsSystem.jointsFFI;
-    if (ffi == null) {
-      print('⚠️ Joints FFI not available for Prismatic Joint');
-      return;
-    }
-
     final def = calloc<JointDef>();
     try {
       def.ref.type = JointType.prismatic;
@@ -207,7 +179,7 @@ class FPrismaticJointStructure extends FJoint {
       def.ref.motorSpeed = motorSpeed;
       def.ref.maxMotorForce = maxMotorForce;
 
-      _jointId = ffi.createJoint(world, def);
+      _jointId = native.createJoint(world, def);
       print('📏 Prismatic Joint Created: ID=$_jointId');
     } finally {
       calloc.free(def);
@@ -233,12 +205,6 @@ class FWeldJointStructure extends FJoint {
   void create(WorldId world) {
     if (isCreated) return;
 
-    final ffi = FPhysicsSystem.jointsFFI;
-    if (ffi == null) {
-      print('⚠️ Joints FFI not available for Weld Joint');
-      return;
-    }
-
     final def = calloc<JointDef>();
     try {
       def.ref.type = JointType.weld;
@@ -249,7 +215,7 @@ class FWeldJointStructure extends FJoint {
       def.ref.stiffness = stiffness;
       def.ref.damping = damping;
 
-      _jointId = ffi.createJoint(world, def);
+      _jointId = native.createJoint(world, def);
       print('🔗 Weld Joint Created: ID=$_jointId');
     } finally {
       calloc.free(def);

@@ -4,7 +4,10 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../graph/node.dart';
-import '../native/particles_ffi.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import '../native/flash_native_bindings.dart' as native;
+import '../native/flash_native_bindings.dart' show NativeParticle, ParticleEmitter;
+import '../native/flash_native.dart';
 
 /// Individual particle data
 class FParticle {
@@ -413,11 +416,34 @@ class FParticleEmitter extends FNode {
   bool emitting;
   double _emissionAccumulator = 0;
 
+  /// Tier 1 degradation: particles are decorative, so a build without the
+  /// native core disables emitters instead of throwing. [isActive] reports it.
+  final bool _disabled;
+
+  static bool _warnedUnavailable = false;
+
+  /// Whether this emitter is actually simulating.
+  ///
+  /// False when the native core is unavailable; the emitter is then an inert
+  /// node that costs nothing and draws nothing.
+  bool get isActive => !_disabled && !_disposed;
+
   FParticleEmitter({ParticleEmitterConfig? config, this.emitting = true, super.name = 'ParticleEmitter'})
     : config = config ?? ParticleEmitterConfig(),
-      maxParticles = config?.maxParticles ?? 1000 {
-    // Ensure native core is initialized
-    FlashNativeParticles.init();
+      maxParticles = config?.maxParticles ?? 1000,
+      _disabled = !FlashNative.isAvailable {
+    if (_disabled) {
+      if (!_warnedUnavailable) {
+        _warnedUnavailable = true;
+        debugPrint(
+          'Flash: particle emitters are disabled because the native core is '
+          'unavailable. ${FlashNative.unavailableReason}',
+        );
+      }
+      _nativeEmitter = nullptr;
+      return;
+    }
+
     _nativeEmitter = calloc<ParticleEmitter>();
 
     // Allocate shared memory for particles
@@ -429,10 +455,13 @@ class FParticleEmitter extends FNode {
     _updateNativeGravity();
   }
 
-  int get shapeType => _nativeEmitter.ref.shapeType;
-  set shapeType(int value) => _nativeEmitter.ref.shapeType = value;
+  int get shapeType => _disabled ? config.shapeType : _nativeEmitter.ref.shapeType;
+  set shapeType(int value) {
+    if (!_disabled) _nativeEmitter.ref.shapeType = value;
+  }
 
   void _updateNativeGravity() {
+    if (_disabled) return;
     _nativeEmitter.ref.gravityX = config.gravity.x;
     _nativeEmitter.ref.gravityY = config.gravity.y;
     _nativeEmitter.ref.gravityZ = config.gravity.z;
@@ -441,26 +470,44 @@ class FParticleEmitter extends FNode {
   /// Direct access to native particles for the renderer
   Pointer<NativeParticle> get nativeParticles => _nativeEmitter.ref.particles;
   Pointer<ParticleEmitter> get nativeEmitterPointer => _nativeEmitter;
-  int get activeCount => _nativeEmitter.ref.activeCount;
+  int get activeCount => _disabled ? 0 : _nativeEmitter.ref.activeCount;
+
+  /// Particles spawned so far by a non-looping emitter.
+  ///
+  /// A one-shot burst used to be gated on `activeCount == 0`, which meant that
+  /// the moment the last particle died the emitter saw an empty buffer and
+  /// fired again — an "explosion" preset looped forever. Counting spawns
+  /// instead gives a burst that ends.
+  int _burstSpawned = 0;
+
+  /// Re-arms a non-looping emitter so it can fire another burst.
+  void restart() {
+    _burstSpawned = 0;
+    _emissionAccumulator = 0;
+    emitting = true;
+  }
 
   @override
   void update(double dt) {
     super.update(dt);
+    if (_disabled) return;
 
     // Update native gravity in case it changed
     _updateNativeGravity();
 
     // 1. Emit new particles
-    if (emitting && (config.loop || activeCount == 0)) {
+    if (emitting && (config.loop || _burstSpawned < maxParticles)) {
       _emissionAccumulator += dt * config.emissionRate;
       while (_emissionAccumulator >= 1 && activeCount < maxParticles) {
+        if (!config.loop && _burstSpawned >= maxParticles) break;
         _spawnParticle();
+        if (!config.loop) _burstSpawned++;
         _emissionAccumulator -= 1;
       }
     }
 
     // 2. Call Native C++ update logic
-    FlashNativeParticles.updateParticles!(_nativeEmitter, dt);
+    native.updateParticles(_nativeEmitter, dt);
   }
 
   void _spawnParticle() {
@@ -483,7 +530,7 @@ class FParticleEmitter extends FNode {
     }
 
     // Pass to C++
-    FlashNativeParticles.spawnParticle!(
+    native.spawnParticle(
       _nativeEmitter,
       worldPosition.x,
       worldPosition.y,
@@ -509,9 +556,11 @@ class FParticleEmitter extends FNode {
     if (_disposed) return;
     _disposed = true;
 
-    // IMPORTANT: Free native memory!
-    calloc.free(_nativeEmitter.ref.particles);
-    calloc.free(_nativeEmitter);
+    if (!_disabled) {
+      // IMPORTANT: Free native memory!
+      calloc.free(_nativeEmitter.ref.particles);
+      calloc.free(_nativeEmitter);
+    }
     super.dispose();
   }
 }

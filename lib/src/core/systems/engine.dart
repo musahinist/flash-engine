@@ -9,7 +9,9 @@ import '../rendering/camera.dart';
 import '../rendering/light.dart';
 import '../systems/physics.dart';
 import '../systems/particle.dart';
-import '../native/particles_ffi.dart';
+import '../native/flash_native_bindings.dart' as native;
+import '../native/flash_native_bindings.dart' show NativeScene;
+import '../native/flash_native.dart';
 import 'audio.dart';
 import 'input.dart';
 import 'scene_manager.dart';
@@ -24,8 +26,16 @@ class FEngine extends ChangeNotifier {
   final FSceneManager sceneManager = FSceneManager();
   final FTweenManager tweenManager = FTweenManager();
 
-  /// Native Transform Hierarchy
-  late final Pointer<NativeScene> nativeScene;
+  /// Native transform hierarchy, or `null` when the native core is
+  /// unavailable. Tier 0: the scene graph keeps working either way — [FNode]
+  /// falls back to pure-Dart transform maths when it has no native slot.
+  Pointer<NativeScene>? _nativeScene;
+
+  /// The native scene pointer. Only valid when [hasNativeSceneGraph].
+  Pointer<NativeScene> get nativeScene => _nativeScene!;
+
+  /// Whether transforms are being resolved natively.
+  bool get hasNativeSceneGraph => _nativeScene != null;
 
   /// Current viewport size in pixels
   v.Vector2 viewportSize = v.Vector2(0, 0);
@@ -54,26 +64,17 @@ class FEngine extends ChangeNotifier {
   double elapsed = 0.0;
 
   FEngine() {
-    // 1. Ensure native libraries are loaded
-    init();
+    // Native scene graph (10k node pool). Must exist before the root node is
+    // created. On a build without the native core this stays null and FNode
+    // resolves world matrices in Dart instead — the scene graph, renderer,
+    // cameras, tweens, timers, input and audio all still work.
+    if (FlashNative.isAvailable) {
+      _nativeScene = native.createNativeScene(10000);
+    }
 
-    // 2. Initialize native scene graph (Max 10k nodes for now)
-    // This must happen BEFORE the tree/root node creation.
-    nativeScene = FlashNativeParticles.createNativeScene!(10000);
-
-    // 3. Initialize scene tree
     tree = FSceneTree(this);
 
     _ticker = Ticker(_tick);
-  }
-
-  /// Manually initialize native libraries (if using components without FEngine instance)
-  static void init() {
-    try {
-      FlashNativeParticles.init();
-    } catch (e) {
-      print('Failed to initialize native particles: $e');
-    }
   }
 
   /// Register a camera when it's added to the scene
@@ -88,7 +89,6 @@ class FEngine extends ChangeNotifier {
 
   void start() {
     audio.init();
-    FlashNativeParticles.init();
     _ticker.start();
   }
 
@@ -105,7 +105,11 @@ class FEngine extends ChangeNotifier {
   void dispose() {
     _ticker.dispose();
     audio.dispose();
-    FlashNativeParticles.destroyNativeScene!(nativeScene);
+    final scene = _nativeScene;
+    if (scene != null) {
+      native.destroyNativeScene(scene);
+      _nativeScene = null;
+    }
     super.dispose();
   }
 
@@ -135,7 +139,10 @@ class FEngine extends ChangeNotifier {
     tweenManager.update(dt);
 
     // Update Native Transforms Hierarchy
-    FlashNativeParticles.updateSceneTransforms!(nativeScene);
+    final nativeScenePtr = _nativeScene;
+    if (nativeScenePtr != null) {
+      native.updateSceneTransforms(nativeScenePtr);
+    }
 
     // Use first visible registered camera (O(1) instead of O(n) tree traversal)
     activeCamera = _activeCameras.firstWhere(

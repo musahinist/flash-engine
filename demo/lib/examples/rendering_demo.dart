@@ -17,7 +17,6 @@ class _RenderingDemoExampleState extends State<RenderingDemoExample> {
   @override
   void initState() {
     super.initState();
-    FEngine.init(); // Initialize native libraries
     _physicsWorld = FPhysicsSystem(gravity: FPhysics.standardGravity);
     _generateWavyPath();
   }

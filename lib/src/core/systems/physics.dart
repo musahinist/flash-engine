@@ -1,12 +1,12 @@
 import 'dart:ffi';
-import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../graph/node.dart';
 import '../graph/signal.dart';
-import '../native/particles_ffi.dart';
-import '../native/physics_joints_ffi.dart';
+import '../native/flash_native_bindings.dart' as native;
+import '../native/flash_native_bindings.dart' show NativeBody, RayCastHit;
+import '../native/flash_native.dart';
 import '../native/physics_ids.dart';
 
 export '../native/physics_ids.dart'; // Export ID types (WorldId, BodyId)
@@ -16,20 +16,6 @@ class FPhysicsSystem {
   final WorldId world;
   final v.Vector2 gravity;
 
-  // Static instance of Joints FFI
-  static PhysicsJointsFFI? _jointsFFI;
-  static PhysicsJointsFFI? get jointsFFI {
-    if (_jointsFFI == null && (Platform.isMacOS || Platform.isIOS)) {
-      try {
-        final lib = PhysicsJointsFFI.loadLibrary();
-        _jointsFFI = PhysicsJointsFFI(lib);
-      } catch (e) {
-        debugPrint('⚠️ Failed to load physics joints FFI: $e');
-      }
-    }
-    return _jointsFFI;
-  }
-
   FPhysicsSystem({v.Vector2? gravity})
     : gravity = gravity ?? FPhysics.standardGravity,
       // Safety check for native initialization
@@ -38,31 +24,19 @@ class FPhysicsSystem {
     world.ref.gravityX = this.gravity.x;
     world.ref.gravityY = this.gravity.y;
 
-    // OPTIMIZED PARAMETERS for stability (prevent sinking & vibration)
-    // 8x Sub-stepping allows us to use very stiff springs (120Hz) stably.
-    // This is critical for preventing sinking into the rigid floor.
+    // Stability tuning: 8x sub-stepping lets us run very stiff springs
+    // (120Hz) without the bodies sinking into a rigid floor.
     world.ref.contactHertz = 120.0;
-
-    // OPTIMIZED PARAMETERS for stability (prevent sinking & vibration)
-    world.ref.contactHertz = 120.0; // High stiffness to prevent sinking
     world.ref.positionIterations = 4; // Sufficient with sub-stepping
     world.ref.velocityIterations = 4;
     world.ref.contactDampingRatio = 0.5; // Standard damping
-
-    // Joints FFI is now lazily initialized via the getter
   }
 
   static WorldId _createWorldSafe(int capacity) {
-    // Ensure native library is loaded
-    FlashNativeParticles.init();
-
-    if (FlashNativeParticles.createPhysicsWorld == null) {
-      throw UnsupportedError(
-        'Native physics functions not initialized.\n'
-        'Please ensure the native library is properly integrated.',
-      );
-    }
-    return FlashNativeParticles.createPhysicsWorld!(capacity);
+    // Tier 2: physics cannot be faked. Fail loudly at construction rather than
+    // silently not simulating.
+    FlashNative.require('Physics');
+    return native.createPhysicsWorld(capacity);
   }
 
   double _accumulator = 0.0;
@@ -79,17 +53,17 @@ class FPhysicsSystem {
     _accumulator += dt;
 
     while (_accumulator >= _fixedDt) {
-      FlashNativeParticles.stepPhysics!(world, _fixedDt);
+      native.stepPhysics(world, _fixedDt);
       _accumulator -= _fixedDt;
     }
   }
 
   void dispose() {
-    FlashNativeParticles.destroyPhysicsWorld!(world);
+    native.destroyPhysicsWorld(world);
   }
 
   void setWarmStarting(bool enable) {
-    // FlashNativeParticles.setWarmStarting!(world, enable ? 1 : 0);
+    // native.setWarmStarting(world, enable ? 1 : 0);
   }
 
   // --- ID-Based API Wrappers (Static for strict separation) ---
@@ -106,7 +80,7 @@ class FPhysicsSystem {
     int categoryBits,
     int maskBits,
   ) {
-    return FlashNativeParticles.createBody!(
+    return native.createBody(
       world,
       type,
       shapeType,
@@ -121,19 +95,19 @@ class FPhysicsSystem {
   }
 
   static void setBodyVelocity(WorldId world, BodyId bodyId, double vx, double vy) {
-    FlashNativeParticles.setBodyVelocity!(world, bodyId, vx, vy);
+    native.setBodyVelocity(world, bodyId, vx, vy);
   }
 
   static void applyForce(WorldId world, BodyId bodyId, double fx, double fy) {
-    FlashNativeParticles.applyForce!(world, bodyId, fx, fy);
+    native.applyForce(world, bodyId, fx, fy);
   }
 
   static void applyTorque(WorldId world, BodyId bodyId, double torque) {
-    FlashNativeParticles.applyTorque!(world, bodyId, torque);
+    native.applyTorque(world, bodyId, torque);
   }
 
   static void getBodyPosition(WorldId world, BodyId bodyId, Pointer<Float> posX, Pointer<Float> posY) {
-    FlashNativeParticles.getBodyPosition!(world, bodyId, posX, posY);
+    native.getBodyPosition(world, bodyId, posX, posY);
   }
 
   // Helper to access body struct safely via ID
@@ -187,8 +161,7 @@ class FPhysicsSystem {
 
   // --- RayCast ---
   static RayCastHit? rayCast(WorldId world, double fromX, double fromY, double toX, double toY) {
-    if (FlashNativeParticles.rayCast == null) return null;
-    final result = FlashNativeParticles.rayCast!(world, fromX, fromY, toX, toY);
+    final result = native.rayCast(world, fromX, fromY, toX, toY);
     if (result.hit != 0) return result;
     return null;
   }
@@ -203,16 +176,15 @@ class FPhysicsSystem {
     double pressure,
     double stiffness,
   ) {
-    if (FlashNativeParticles.createSoftBody == null) return -1;
-    return FlashNativeParticles.createSoftBody!(world, pointCount, initialX, initialY, pressure, stiffness);
+    return native.createSoftBody(world, pointCount, initialX, initialY, pressure, stiffness);
   }
 
   static void getSoftBodyPoint(WorldId world, int sbId, int pointIdx, Pointer<Float> outX, Pointer<Float> outY) {
-    FlashNativeParticles.getSoftBodyPoint!(world, sbId, pointIdx, outX, outY);
+    native.getSoftBodyPoint(world, sbId, pointIdx, outX, outY);
   }
 
   static void setSoftBodyPoint(WorldId world, int sbId, int pointIdx, double x, double y) {
-    FlashNativeParticles.setSoftBodyPoint!(world, sbId, pointIdx, x, y);
+    native.setSoftBodyPoint(world, sbId, pointIdx, x, y);
   }
 
   /// Helper to get point position as Offset without manual implementation management
@@ -220,7 +192,7 @@ class FPhysicsSystem {
     final ptrX = calloc<Float>();
     final ptrY = calloc<Float>();
 
-    FlashNativeParticles.getSoftBodyPoint!(world, sbId, pointIdx, ptrX, ptrY);
+    native.getSoftBodyPoint(world, sbId, pointIdx, ptrX, ptrY);
 
     final x = ptrX.value;
     final y = ptrY.value;
@@ -232,7 +204,7 @@ class FPhysicsSystem {
   }
 
   static void setSoftBodyParams(WorldId world, int sbId, double pressure, double stiffness) {
-    FlashNativeParticles.setSoftBodyParams!(world, sbId, pressure, stiffness);
+    native.setSoftBodyParams(world, sbId, pressure, stiffness);
   }
 }
 

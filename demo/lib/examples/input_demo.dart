@@ -26,7 +26,6 @@ class _InputDemoExampleState extends State<InputDemoExample> {
   @override
   void initState() {
     super.initState();
-    FEngine.init(); // Initialize native libraries
   }
 
   @override

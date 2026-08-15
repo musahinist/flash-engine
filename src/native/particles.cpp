@@ -5,7 +5,7 @@
 
 extern "C" {
 
-void update_particles(ParticleEmitter* emitter, float dt) {
+FLASH_API void update_particles(ParticleEmitter* emitter, float dt) {
     if (!emitter || !emitter->particles) return;
 
     for (int i = emitter->activeCount - 1; i >= 0; --i) {
@@ -30,7 +30,7 @@ void update_particles(ParticleEmitter* emitter, float dt) {
     }
 }
 
-void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color) {
+FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color) {
     if (!emitter || !emitter->particles || emitter->activeCount >= emitter->maxParticles) return;
 
     NativeParticle& p = emitter->particles[emitter->activeCount++];
@@ -110,7 +110,7 @@ void fill_chunk_pass2(ParticleEmitter* emitter, float* m, float* vertices, uint3
     }
 }
 
-int fill_vertex_buffer(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, int maxRenderCount) {
+FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* m, float* vertices, uint32_t* colors, int maxRenderCount) {
     if (!emitter || !emitter->particles || emitter->activeCount == 0) return 0;
 
     int totalToProcess = std::min(emitter->activeCount, maxRenderCount);

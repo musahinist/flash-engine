@@ -3,7 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
 import '../math/transform.dart';
 import '../rendering/light.dart';
-import '../native/particles_ffi.dart';
+import '../native/flash_native_bindings.dart' as native;
+import '../native/flash_native_bindings.dart' show NativeNode;
 import 'tree.dart';
 import 'signal.dart';
 
@@ -105,15 +106,18 @@ class FNode {
     enterTree();
     treeEntered.emit();
 
-    // Create Native Node
-    final nativeScene = gameTree.engine.nativeScene;
-    final parentNativeId = parent?.nativeNodeId ?? -1;
-    _nativeNodeId = FlashNativeParticles.createNativeNode!(nativeScene, parentNativeId);
-    if (_nativeNodeId != -1) {
-      _nativeNodePtr = Pointer<NativeNode>.fromAddress(
-        nativeScene.ref.nodes.address + _nativeNodeId * sizeOf<NativeNode>(),
-      );
-      _syncToNative();
+    // Claim a native transform slot when the native core is present. Without
+    // one, worldMatrix falls back to computing the hierarchy in Dart.
+    if (gameTree.engine.hasNativeSceneGraph) {
+      final nativeScene = gameTree.engine.nativeScene;
+      final parentNativeId = parent?.nativeNodeId ?? -1;
+      _nativeNodeId = native.createNativeNode(nativeScene, parentNativeId);
+      if (_nativeNodeId != -1) {
+        _nativeNodePtr = Pointer<NativeNode>.fromAddress(
+          nativeScene.ref.nodes.address + _nativeNodeId * sizeOf<NativeNode>(),
+        );
+        _syncToNative();
+      }
     }
 
     for (final child in children) {
@@ -155,9 +159,9 @@ class FNode {
     final ptr = _nativeNodePtr;
     if (ptr == null || _nativeNodeId < 0) return;
 
-    final scene = _tree?.engine.nativeScene;
-    if (scene != null) {
-      FlashNativeParticles.destroyNativeNode?.call(scene, _nativeNodeId);
+    final engine = _tree?.engine;
+    if (engine != null && engine.hasNativeSceneGraph) {
+      native.destroyNativeNode(engine.nativeScene, _nativeNodeId);
     }
 
     _nativeNodePtr = null;
@@ -315,8 +319,11 @@ class FNode {
   }
 
   Matrix4 get worldMatrix {
-    if (_nativeNodePtr != null) {
-      final nativeScene = _tree!.engine.nativeScene.ref;
+    // A node can hold a native slot while its tree reference is being torn
+    // down, so this must not assume _tree is still attached.
+    final engine = _tree?.engine;
+    if (_nativeNodePtr != null && engine != null && engine.hasNativeSceneGraph) {
+      final nativeScene = engine.nativeScene.ref;
       if (_lastFetchedVersion != nativeScene.totalUpdates) {
         final nm = _nativeNodePtr!.ref.worldMatrix;
         _cachedWorldMatrix.setValues(

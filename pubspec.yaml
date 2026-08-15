@@ -16,6 +16,9 @@ dependencies:
   vector_math: ^2.1.4
   audioplayers: ^6.0.0
   ffi: ^2.1.0
+  hooks: ^2.1.0
+  code_assets: ^1.2.1
+  native_toolchain_c: ^0.19.3
 
 dev_dependencies:
   flutter_test:

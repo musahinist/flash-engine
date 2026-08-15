@@ -2,7 +2,7 @@
 // (Pointer or Int) from the high-level API.
 
 import 'dart:ffi'; // For Pointer
-import 'particles_ffi.dart'; // For PhysicsWorld struct
+import 'flash_native_bindings.dart'; // For PhysicsWorld struct
 
 /// Represents a Handle/ID for the Physics World.
 /// In the current FFI implementation, this is a Pointer to the World struct.

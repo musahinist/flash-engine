@@ -116,7 +116,6 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
   @override
   void initState() {
     super.initState();
-    FEngine.init(); // Initialize native bindings manually here
     physicsSystem = FPhysicsSystem(gravity: v.Vector2(0, 0)); // Top-down, 0 gravity
 
     // Connect Signals

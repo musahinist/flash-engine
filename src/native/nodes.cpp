@@ -56,7 +56,7 @@ void mat4_from_prs(float* m, float tx, float ty, float tz, float rx, float ry, f
     m[15] = 1.0f;
 }
 
-NativeScene* create_native_scene(int maxNodes) {
+FLASH_API NativeScene* create_native_scene(int maxNodes) {
     NativeScene* scene = new NativeScene();
     scene->maxNodes = maxNodes;
     scene->nodes = new NativeNode[maxNodes];
@@ -67,14 +67,14 @@ NativeScene* create_native_scene(int maxNodes) {
     return scene;
 }
 
-void destroy_native_scene(NativeScene* scene) {
+FLASH_API void destroy_native_scene(NativeScene* scene) {
     if (!scene) return;
     delete[] scene->nodes;
     delete[] scene->freeList;
     delete scene;
 }
 
-int32_t create_native_node(NativeScene* scene, int32_t parentId) {
+FLASH_API int32_t create_native_node(NativeScene* scene, int32_t parentId) {
     int32_t id;
     if (scene->freeCount > 0) {
         // Reuse a released slot before growing the pool.
@@ -100,7 +100,7 @@ int32_t create_native_node(NativeScene* scene, int32_t parentId) {
     return id;
 }
 
-void destroy_native_node(NativeScene* scene, int32_t nodeId) {
+FLASH_API void destroy_native_node(NativeScene* scene, int32_t nodeId) {
     if (!scene || nodeId < 0 || nodeId >= scene->activeCount) return;
 
     NativeNode& node = scene->nodes[nodeId];
@@ -170,7 +170,7 @@ static void resolve_node(NativeScene* scene, int32_t id, int depth) {
     }
 }
 
-void update_scene_transforms(NativeScene* scene) {
+FLASH_API void update_scene_transforms(NativeScene* scene) {
     if (!scene) return;
     scene->totalUpdates++;
 

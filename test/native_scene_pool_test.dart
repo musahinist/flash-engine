@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flash/flash.dart';
 // Not exported from package:flash yet (see plan finding 1.44 — the native
 // bindings stay private until the loader consolidation in phase 2).
-import 'package:flash/src/core/native/particles_ffi.dart';
+import 'package:flash/src/core/native/flash_native_bindings.dart' as native;
 import 'package:vector_math/vector_math_64.dart';
 
 /// Covers the native scene-graph slot pool and the order-independent
@@ -55,7 +55,7 @@ void main() {
     engine.scene.addChild(parent);
     parent.addChild(child);
 
-    FlashNativeParticles.updateSceneTransforms!(engine.nativeScene);
+    native.updateSceneTransforms(engine.nativeScene);
 
     expect(child.worldPosition.x, closeTo(110, 0.001));
     expect(child.worldPosition.y, closeTo(55, 0.001));
@@ -74,7 +74,7 @@ void main() {
     child.addChild(grandchild);
     parent.addChild(child);
 
-    FlashNativeParticles.updateSceneTransforms!(engine.nativeScene);
+    native.updateSceneTransforms(engine.nativeScene);
 
     expect(grandchild.worldPosition.x, closeTo(10, 0.001));
     expect(grandchild.worldPosition.y, closeTo(-2, 0.001));
@@ -90,7 +90,7 @@ void main() {
     engine.scene.addChild(parent);
     parent.addChild(child);
 
-    FlashNativeParticles.updateSceneTransforms!(engine.nativeScene);
+    native.updateSceneTransforms(engine.nativeScene);
     expect(child.worldPosition.x, closeTo(105, 0.001));
 
     // Detaching the parent must not leave the child inheriting from a slot
@@ -99,7 +99,7 @@ void main() {
     for (int i = 0; i < 5; i++) {
       engine.scene.addChild(FNode(name: 'filler$i')..transform.position = Vector3(999, 999, 0));
     }
-    FlashNativeParticles.updateSceneTransforms!(engine.nativeScene);
+    native.updateSceneTransforms(engine.nativeScene);
 
     expect(child.worldPosition.x, lessThan(900), reason: 'child inherited a recycled slot');
   });

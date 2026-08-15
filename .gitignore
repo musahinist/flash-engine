@@ -32,3 +32,6 @@ migrate_working_dir/
 
 # External Repositories
 other_repo/
+
+# Native build output (produced by hook/build.dart)
+lib/src/core/native/bin/

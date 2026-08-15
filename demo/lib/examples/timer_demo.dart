@@ -32,7 +32,6 @@ class _TimerDemoState extends State<TimerDemo> {
   @override
   void initState() {
     super.initState();
-    FEngine.init();
   }
 
   @override

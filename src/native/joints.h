@@ -2,6 +2,7 @@
 #define FLASH_JOINTS_H
 
 #include <stdint.h>
+#include "flash_export.h"
 
 extern "C" {
 
@@ -108,8 +109,8 @@ struct Joint {
 };
 
 // Joint management functions
-int create_joint(struct PhysicsWorld* world, JointDef* def);
-void destroy_joint(struct PhysicsWorld* world, int jointId);
+FLASH_API int create_joint(struct PhysicsWorld* world, JointDef* def);
+FLASH_API void destroy_joint(struct PhysicsWorld* world, int jointId);
 void init_joint_velocity_constraints(struct PhysicsWorld* world, float dt);
 void solve_joint_velocity_constraints(struct PhysicsWorld* world);
 void solve_joint_position_constraints(struct PhysicsWorld* world);

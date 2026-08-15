@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include "flash_export.h"
 
 // Bumped whenever the exported C ABI changes (struct layout, signatures).
 // Dart mirrors this in FlashNative and checks it at load time.
@@ -151,21 +152,21 @@ struct PhysicsWorld {
     void* warmStartCache;
 };
 
-PhysicsWorld* create_physics_world(int maxBodies);
-void destroy_physics_world(PhysicsWorld* world);
-void step_physics(PhysicsWorld* world, float dt);
-int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits);
-int32_t get_physics_version();
-void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy);
-void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque);
-void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy);
-void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y);
+FLASH_API PhysicsWorld* create_physics_world(int maxBodies);
+FLASH_API void destroy_physics_world(PhysicsWorld* world);
+FLASH_API void step_physics(PhysicsWorld* world, float dt);
+FLASH_API int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits);
+FLASH_API int32_t get_physics_version();
+FLASH_API void apply_force(PhysicsWorld* world, int32_t bodyId, float fx, float fy);
+FLASH_API void apply_torque(PhysicsWorld* world, int32_t bodyId, float torque);
+FLASH_API void set_body_velocity(PhysicsWorld* world, int32_t bodyId, float vx, float vy);
+FLASH_API void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, float* y);
 
 // Soft Body functions
-int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness);
-void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float* x, float* y);
-void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y);
-void set_soft_body_params(PhysicsWorld* world, int32_t sbId, float pressure, float stiffness);
+FLASH_API int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness);
+FLASH_API void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float* x, float* y);
+FLASH_API void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y);
+FLASH_API void set_soft_body_params(PhysicsWorld* world, int32_t sbId, float pressure, float stiffness);
 
 // RayCasting
 struct RayCastHit {
@@ -178,7 +179,7 @@ struct RayCastHit {
     int hit; // boolean flag
 };
 
-RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, float endX, float endY);
+FLASH_API RayCastHit ray_cast(PhysicsWorld* world, float startX, float startY, float endX, float endY);
 
 }
 
