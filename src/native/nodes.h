@@ -21,7 +21,6 @@ struct NativeNode {
     NativeTransform worldMatrix;
     
     int32_t parentId; // -1 for root
-    int32_t visible;
     int32_t dirty;
     uint32_t worldVersion; // Track if worldMatrix is up-to-date
     int32_t alive;         // 0 once the slot is released back to the free list

@@ -62,8 +62,6 @@ final class NativeNode extends Struct {
   @Int32()
   external int parentId;
   @Int32()
-  external int visible;
-  @Int32()
   external int dirty;
   @Uint32()
   external int worldVersion;

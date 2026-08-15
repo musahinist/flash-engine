@@ -90,7 +90,6 @@ FLASH_API int32_t create_native_node(NativeScene* scene, int32_t parentId) {
     node.posX = node.posY = node.posZ = 0;
     node.rotX = node.rotY = node.rotZ = 0;
     node.scaleX = node.scaleY = node.scaleZ = 1.0f;
-    node.visible = 1;
     node.dirty = 1;
     node.worldVersion = 0;
     node.alive = 1;
@@ -108,7 +107,6 @@ FLASH_API void destroy_native_node(NativeScene* scene, int32_t nodeId) {
 
     node.alive = 0;
     node.parentId = -1;
-    node.visible = 0;
     node.dirty = 0;
 
     // Orphan any node still pointing at this slot, so a later slot reuse

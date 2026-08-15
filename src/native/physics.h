@@ -7,7 +7,7 @@
 
 // Bumped whenever the exported C ABI changes (struct layout, signatures).
 // Dart mirrors this in FlashNative and checks it at load time.
-#define FLASH_ABI_VERSION 1
+#define FLASH_ABI_VERSION 2
 
 extern "C" {
 
