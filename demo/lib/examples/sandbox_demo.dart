@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
 class SandboxDemoExample extends StatefulWidget {
   const SandboxDemoExample({super.key});
 
@@ -109,9 +113,24 @@ class _SandboxDemoExampleState extends State<SandboxDemoExample> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF020205),
-      body: GestureDetector(
+    return DemoPage(
+      title: 'Sandbox',
+      subtitle: 'Draw static geometry, then drop bodies onto what you drew.',
+      controls: [
+        DemoButton(label: 'Spawn a body', icon: Icons.add_rounded, onPressed: _spawnObject),
+        DemoButton(
+          label: 'Clear',
+          icon: Icons.delete_sweep_rounded,
+          tint: DemoTheme.danger,
+          onPressed: _clear,
+        ),
+      ],
+      readouts: [
+        DemoStat(label: 'Drawn lines', value: '${_staticLines.length}'),
+        DemoStat(label: 'Dropped bodies', value: '${_dynamicObjects.length}'),
+      ],
+      hint: 'Drag to draw a line; every stroke becomes a static body.',
+      scene: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onPanStart: (details) {
           final box = context.findRenderObject() as RenderBox?;
@@ -183,56 +202,12 @@ class _SandboxDemoExampleState extends State<SandboxDemoExample> {
                       debugDraw: true,
                     ),
           ],
-          overlay: [_buildHUD(), _buildDrawingOverlay()],
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 20),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FloatingActionButton.extended(
-              heroTag: 'spawn',
-              onPressed: _spawnObject,
-              label: const Text('SPAWN'),
-              icon: const Icon(Icons.add),
-              backgroundColor: Colors.cyanAccent,
-              foregroundColor: Colors.black,
-            ),
-            const SizedBox(width: 16),
-            FloatingActionButton.extended(
-              heroTag: 'clear',
-              onPressed: _clear,
-              label: const Text('CLEAR'),
-              icon: const Icon(Icons.delete_sweep),
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
-          ],
+          overlay: [_buildDrawingOverlay()],
         ),
       ),
     );
   }
 
-  Widget _buildHUD() {
-    return Positioned(
-      top: 40,
-      left: 20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _HUDLabel(text: 'MODE: NEON_ARCHITECT', color: Colors.cyanAccent),
-          const SizedBox(height: 4),
-          _HUDLabel(
-            text: 'BODIES: ${_staticLines.length + _dynamicObjects.length}',
-            color: Colors.white.withValues(alpha: 0.3),
-            isSmall: true,
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildDrawingOverlay() {
     return ValueListenableBuilder<List<Offset>>(
@@ -327,22 +302,3 @@ class _GridPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
-class _HUDLabel extends StatelessWidget {
-  final String text;
-  final Color color;
-  final bool isSmall;
-  const _HUDLabel({required this.text, required this.color, this.isSmall = false});
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontFamily: 'monospace',
-        fontWeight: FontWeight.bold,
-        fontSize: isSmall ? 10 : 14,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-}

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
+
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
 import 'dart:math' as math;
 
 class JointsDemoExample extends StatefulWidget {
@@ -30,13 +34,27 @@ class _JointsDemoExampleState extends State<JointsDemoExample> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF050505),
-      body: FScene(
-        showDebugOverlay: false,
-        onInit: (engine, viewport) {
-          // One-time setup if needed
-        },
+    return DemoPage(
+      title: 'Joints',
+      subtitle: 'A motorised hub, pendulum arms and a slack web, all from joints.',
+      accent: DemoTheme.accentAlt,
+      controls: const [
+        DemoPanel(
+          title: 'In this scene',
+          tint: DemoTheme.accentAlt,
+          children: [
+            DemoLegend(
+              entries: [
+                (color: DemoTheme.accent, label: 'revolute: the driven hub'),
+                (color: DemoTheme.accentAlt, label: 'distance, rigid: the arms'),
+                (color: DemoTheme.warning, label: 'distance, chained: the web'),
+              ],
+            ),
+          ],
+        ),
+      ],
+      hint: 'Tap anywhere to inject particles and watch the web absorb them.',
+      scene: FScene(
         scene: [
           // Cyberpunk Background Elements
           const _NeonGrid(),
@@ -89,7 +107,6 @@ class _JointsDemoExampleState extends State<JointsDemoExample> {
             ),
         ],
         overlay: [
-          _buildSciFiHUD(),
           Positioned.fill(
             child: GestureDetector(
               onTapDown: (details) {
@@ -188,41 +205,6 @@ class _JointsDemoExampleState extends State<JointsDemoExample> {
     ];
   }
 
-  Widget _buildSciFiHUD() {
-    return Positioned(
-      left: 20,
-      top: 20,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _HUDLabel(text: 'SYSTEM: ACTIVE', color: Colors.cyanAccent),
-            const SizedBox(height: 8),
-            _HUDLabel(text: 'KINETIC SCULPTURE BETA v1.0', color: Colors.purpleAccent, isSmall: true),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _HUDMetric(label: 'HUB VELOCITY', value: '1.5 rad/s'),
-                  _HUDMetric(label: 'JOINT TENSION', value: 'STABLE'),
-                  _HUDMetric(label: 'NEON FLUX', value: 'OPTIMAL'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _HUDLabel(text: 'TAP TO INJECT PARTICLES', color: Colors.yellowAccent, isSmall: true),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // --- VISUAL COMPONENTS ---
@@ -347,54 +329,4 @@ class _GridPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
-class _HUDLabel extends StatelessWidget {
-  final String text;
-  final Color color;
-  final bool isSmall;
-  const _HUDLabel({required this.text, required this.color, this.isSmall = false});
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontFamily: 'Courier',
-        fontWeight: FontWeight.bold,
-        fontSize: isSmall ? 10 : 16,
-        letterSpacing: 2,
-      ),
-    );
-  }
-}
-
-class _HUDMetric extends StatelessWidget {
-  final String label;
-  final String value;
-  const _HUDMetric({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label: ',
-            style: const TextStyle(color: Colors.white54, fontSize: 9, fontFamily: 'Courier'),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
-              fontFamily: 'Courier',
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

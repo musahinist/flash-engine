@@ -4,6 +4,8 @@ import 'package:vector_math/vector_math_64.dart' as v;
 import 'dart:math' as math;
 import 'dart:ffi' hide Size;
 
+import '../shared/demo_page.dart';
+
 class PendulumDemoExample extends StatefulWidget {
   const PendulumDemoExample({super.key});
 
@@ -41,9 +43,11 @@ class _PendulumDemoExampleState extends State<PendulumDemoExample> {
       Colors.blueAccent,
     ];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF030303),
-      body: GestureDetector(
+    return DemoPage(
+      title: "Newton's Cradle",
+      subtitle: 'Distance joints, restitution, and momentum through a chain.',
+      hint: 'Drag a ball aside and let go. The impulse travels through the row.',
+      scene: GestureDetector(
         onPanStart: (details) {
           final RenderBox? box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
@@ -120,7 +124,6 @@ class _PendulumDemoExampleState extends State<PendulumDemoExample> {
             ],
           ],
           overlay: [
-            _buildHUD(),
             if (_dragTarget != null)
               Positioned.fill(
                 child: LayoutBuilder(
@@ -140,20 +143,6 @@ class _PendulumDemoExampleState extends State<PendulumDemoExample> {
     );
   }
 
-  Widget _buildHUD() {
-    return Positioned(
-      top: 40,
-      left: 20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _HUDLabel(text: 'SYSTEM: PENDULUM_CORE', color: Colors.cyanAccent),
-          const SizedBox(height: 4),
-          _HUDLabel(text: 'MOMENTUM TRANSFER: ACTIVE', color: Colors.white.withValues(alpha: 0.24), isSmall: true),
-        ],
-      ),
-    );
-  }
 }
 
 class _GlowNode extends StatelessWidget {
@@ -242,23 +231,3 @@ class _TouchIndicatorPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
-class _HUDLabel extends StatelessWidget {
-  final String text;
-  final Color color;
-  final bool isSmall;
-  const _HUDLabel({required this.text, required this.color, this.isSmall = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontFamily: 'Courier',
-        fontWeight: FontWeight.bold,
-        fontSize: isSmall ? 10 : 14,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-}

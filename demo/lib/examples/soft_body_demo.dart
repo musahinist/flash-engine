@@ -3,6 +3,8 @@ import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import 'dart:math' as math;
 
+import '../shared/demo_page.dart';
+
 class SoftBodyDemoExample extends StatefulWidget {
   const SoftBodyDemoExample({super.key});
 
@@ -26,9 +28,11 @@ class _SoftBodyDemoExampleState extends State<SoftBodyDemoExample> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF030303),
-      body: GestureDetector(
+    return DemoPage(
+      title: 'Verlet Soft Body',
+      subtitle: 'The Dart solver: verlet points, distance and area constraints.',
+      hint: 'Drag anywhere to pull the blob. Compare with the native version.',
+      scene: GestureDetector(
         onPanStart: (details) {
           final RenderBox? box = context.findRenderObject() as RenderBox?;
           if (box == null) return;
@@ -46,30 +50,14 @@ class _SoftBodyDemoExampleState extends State<SoftBodyDemoExample> {
             const _NeonGrid(),
             FCamera(position: v.Vector3(0, 0, 1000), isOrthographic: true, orthographicSize: 500.0),
 
-            // Declarative widget for the soft body
-            // Declarative widget for the soft body
+            // The blob is a node with its own solver in process().
             FNeonJelly(radius: 120, pointsCount: 40, dragTarget: _dragTarget),
           ],
-          overlay: [_buildHUD()],
         ),
       ),
     );
   }
 
-  Widget _buildHUD() {
-    return Positioned(
-      top: 40,
-      left: 20,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _HUDLabel(text: 'SYSTEM: BIO_SOFT_CORE', color: Colors.cyanAccent),
-          const SizedBox(height: 4),
-          _HUDLabel(text: 'PRESSURE: NOMINAL', color: Colors.white.withValues(alpha: 0.3), isSmall: true),
-        ],
-      ),
-    );
-  }
 }
 
 // --- DECLARATIVE WIDGET ---
@@ -325,22 +313,3 @@ class _GridPainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
-class _HUDLabel extends StatelessWidget {
-  final String text;
-  final Color color;
-  final bool isSmall;
-  const _HUDLabel({required this.text, required this.color, this.isSmall = false});
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        color: color,
-        fontFamily: 'Courier',
-        fontWeight: FontWeight.bold,
-        fontSize: isSmall ? 10 : 14,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-}

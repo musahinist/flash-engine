@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+
 class TweenDemoExample extends StatefulWidget {
   const TweenDemoExample({super.key});
 
@@ -105,9 +108,39 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF030308),
-      body: FScene(
+    return DemoPage(
+      title: 'Tween System',
+      subtitle: 'FTweenManager driving node transforms imperatively.',
+      controls: [
+        Builder(
+          builder: (context) => DemoButton(
+            label: _isMoving ? 'Animating…' : 'Animate all',
+            icon: _isMoving ? Icons.hourglass_empty_rounded : Icons.play_arrow_rounded,
+            onPressed: _isMoving ? null : () => _animateAll(context),
+          ),
+        ),
+        DemoButton(label: 'Reset', icon: Icons.refresh_rounded, onPressed: _resetScene),
+        DemoPanel(
+          title: 'Easing',
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final name in _easings.keys)
+                  DemoButton(
+                    label: name,
+                    selected: name == _selectedEasing,
+                    onPressed: () => setState(() => _selectedEasing = name),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ],
+      readouts: [DemoStat(label: 'Easing', value: _selectedEasing)],
+      hint: 'Nine cubes tweened at once. The declarative equivalent is Tween Widgets.',
+      scene: FScene(
         sceneBuilder: (ctx, elapsed) {
           // Calculate orbiting light position
           final lightOrbitRadius = 400.0;
@@ -164,126 +197,6 @@ class _TweenDemoExampleState extends State<TweenDemoExample> {
               ),
           ];
         },
-        overlay: [
-          // Header
-          Positioned(
-            top: 60,
-            left: 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '3D LIGHTING & TWEEN',
-                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
-                ),
-                Text(
-                  'DYNAMIC POINT LIGHT SHADOWS',
-                  style: TextStyle(
-                    color: Colors.amberAccent.withValues(alpha: 0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Easing Selector Sidebar
-          Positioned(
-            right: 20,
-            top: 100,
-            bottom: 120,
-            child: Container(
-              width: 140,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: _easings.keys.map((name) {
-                    final isSelected = _selectedEasing == name;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedEasing = name),
-                      child: Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: isSelected ? Colors.cyanAccent : Colors.transparent),
-                        ),
-                        child: Text(
-                          name,
-                          style: TextStyle(
-                            color: isSelected ? Colors.cyanAccent : Colors.white60,
-                            fontSize: 11,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-
-          // Bottom Controls
-          Positioned(
-            bottom: 40,
-            left: 24,
-            right: 24,
-            child: Row(
-              children: [
-                // Back Button
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back, color: Colors.white54),
-                ),
-                const Spacer(),
-                // Main Action Button
-                Builder(
-                  builder: (context) => GestureDetector(
-                    onTap: () => _animateAll(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFFFFD54F), Color(0xFFFF8F00)]),
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(color: Colors.amberAccent.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: -5),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(_isMoving ? Icons.hourglass_empty : Icons.lightbulb_outline, color: Colors.black),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isMoving ? 'ANIMATING...' : 'LIGHT & TWEEN',
-                            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                // Reset Button
-                IconButton(
-                  onPressed: _resetScene,
-                  icon: const Icon(Icons.refresh, color: Colors.white54),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
