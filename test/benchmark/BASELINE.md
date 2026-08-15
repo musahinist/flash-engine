@@ -353,6 +353,40 @@ resolves (the slab test divides by the ray direction, and a zero component is
 where a naive reciprocal produces NaN), and that a crowd of distant bodies does
 not change a soft body's resting position.
 
+---
+
+# Where the frame goes now
+
+Same scenarios as the baseline table at the top, after all of the above.
+
+| Scenario | baseline | now | |
+|---|---|---|---|
+| empty scene | 0.028 ms | 0.025 ms | |
+| 1000 static nodes | 0.053 ms | 0.046 ms | −13% |
+| 1000 moving nodes | 0.079 ms | 0.078 ms | noise |
+| deep hierarchy | 0.841 ms (p95 1.865) | 0.704 ms (p95 1.109) | −16% avg, **−41% p95** |
+| 500 rigid bodies | 1.059 ms | 0.974 ms | −8% |
+| 300 boxes stacking | 0.448 ms | 0.350 ms | −22% |
+| 100k particles (engine loop) | 0.281 ms | 0.105 ms | **−63%** |
+
+And the sections the baseline could not see at all, because nothing drove the
+paint path:
+
+| section | 1000 drawables |
+|---|---|
+| prepareRender (culling) | 0.071 ms |
+| paint.sort | 0.153 ms |
+| paint.nodes | 0.417 ms |
+
+**Physics is still the largest single cost at the engine's stated target**: 0.730
+ms of a 0.974 ms frame at 500 rigid bodies, 75% of it. Phase 1 took 10% off that
+and the remaining work there is structural — the solver's memory layout and its
+`std::map` warm-start cache — not more arithmetic trimming. That is the honest
+next place to look, not the render list.
+
+The second is `paint.nodes` at 0.417 ms, and the decomposition above says 94% of
+it is `Canvas` work that cannot move anywhere.
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles
