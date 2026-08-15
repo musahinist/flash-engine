@@ -42,6 +42,67 @@ FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float 
     p.color = color;
 }
 
+// xorshift32: cheap, deterministic, and good enough for scattering particles.
+// The alternative was calling back into Dart's Random per particle.
+static inline uint32_t next_random(uint32_t& state) {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
+static inline float random_range(uint32_t& state, float lo, float hi) {
+    // 24 bits of mantissa is ample and avoids the bias of a modulo.
+    const float unit = (next_random(state) >> 8) * (1.0f / 16777216.0f);
+    return lo + unit * (hi - lo);
+}
+
+FLASH_API int emit_particles(ParticleEmitter* emitter, const EmitParams* params, int count, uint32_t seed) {
+    if (!emitter || !emitter->particles || !params || count <= 0) return 0;
+
+    const int room = emitter->maxParticles - emitter->activeCount;
+    if (room <= 0) return 0;
+    if (count > room) count = room;
+
+    uint32_t state = seed ? seed : 0x9E3779B9u;
+
+    for (int i = 0; i < count; ++i) {
+        NativeParticle& p = emitter->particles[emitter->activeCount++];
+
+        p.x = params->originX;
+        p.y = params->originY;
+        p.z = params->originZ;
+
+        float vx = random_range(state, params->velMinX, params->velMaxX);
+        float vy = random_range(state, params->velMinY, params->velMaxY);
+        float vz = random_range(state, params->velMinZ, params->velMaxZ);
+
+        if (params->spreadAngle > 0.0f) {
+            // Same two rotations Dart was applying: about X, then about Z.
+            const float ax = random_range(state, -params->spreadAngle, params->spreadAngle);
+            const float az = random_range(state, -params->spreadAngle, params->spreadAngle);
+
+            const float cx = cosf(ax), sx = sinf(ax);
+            const float ty = vy * cx - vz * sx;
+            const float tz = vy * sx + vz * cx;
+            vy = ty; vz = tz;
+
+            const float cz = cosf(az), sz = sinf(az);
+            const float tx2 = vx * cz - vy * sz;
+            const float ty2 = vx * sz + vy * cz;
+            vx = tx2; vy = ty2;
+        }
+
+        p.vx = vx; p.vy = vy; p.vz = vz;
+        p.life = 1.0f;
+        p.maxLife = random_range(state, params->lifetimeMin, params->lifetimeMax);
+        p.size = random_range(state, params->sizeMin, params->sizeMax);
+        p.color = params->color;
+    }
+
+    return count;
+}
+
 struct ThreadWork {
     int startIdx;
     int endIdx;

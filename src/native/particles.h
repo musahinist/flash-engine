@@ -24,9 +24,31 @@ struct ParticleEmitter {
     int shapeType; // 0 = Quad, 1 = Hexagon, 2 = Octagon
 };
 
+// Everything an emission burst needs, so N particles cost one FFI call
+// instead of N. Randomisation and the spread rotation happen on this side —
+// they were being done per particle in Dart, which meant several allocations
+// and a full FFI crossing for every single particle spawned.
+struct EmitParams {
+    float originX, originY, originZ;
+
+    float velMinX, velMinY, velMinZ;
+    float velMaxX, velMaxY, velMaxZ;
+
+    float lifetimeMin, lifetimeMax;
+    float sizeMin, sizeMax;
+
+    float spreadAngle;   // radians; 0 disables the spread rotation entirely
+    uint32_t color;
+};
+
 // Functions exported to Dart via FFI
 FLASH_API void update_particles(ParticleEmitter* emitter, float dt);
 FLASH_API void spawn_particle(ParticleEmitter* emitter, float x, float y, float z, float vx, float vy, float vz, float maxLife, float size, uint32_t color);
+
+/// Spawns up to [count] particles in one call. Returns how many were created
+/// (fewer if the emitter filled up). [seed] advances the internal RNG so the
+/// caller can reproduce a sequence.
+FLASH_API int emit_particles(ParticleEmitter* emitter, const EmitParams* params, int count, uint32_t seed);
 FLASH_API int fill_vertex_buffer(ParticleEmitter* emitter, float* matrix, float* vertices, uint32_t* colors, int maxRenderCount);
 
 }

@@ -754,6 +754,17 @@ FLASH_API void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointI
     }
 }
 
+FLASH_API int32_t get_soft_body_points(PhysicsWorld* world, int32_t sbId, float* outX, float* outY, int32_t maxPoints) {
+    if (!world || sbId < 0 || sbId >= world->activeSoftBodies || !outX || !outY) return 0;
+    NativeSoftBody& sb = world->softBodies[sbId];
+    int32_t count = sb.pointCount < maxPoints ? sb.pointCount : maxPoints;
+    for (int32_t i = 0; i < count; ++i) {
+        outX[i] = sb.points[i].x;
+        outY[i] = sb.points[i].y;
+    }
+    return count;
+}
+
 FLASH_API void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y) {
     if (!world || sbId < 0 || sbId >= world->activeSoftBodies) return;
     if (pointIdx < 0 || pointIdx >= world->softBodies[sbId].pointCount) return;

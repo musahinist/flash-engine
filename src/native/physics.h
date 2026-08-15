@@ -170,6 +170,11 @@ FLASH_API void get_body_position(PhysicsWorld* world, int32_t bodyId, float* x, 
 // Soft Body functions
 FLASH_API int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, float* initialY, float pressure, float stiffness);
 FLASH_API void get_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float* x, float* y);
+
+/// Copies every point of a soft body in one call. Reading them one at a time
+/// cost an FFI crossing plus two calloc/free pairs *per point, per frame*.
+/// Returns the number written.
+FLASH_API int32_t get_soft_body_points(PhysicsWorld* world, int32_t sbId, float* outX, float* outY, int32_t maxPoints);
 FLASH_API void set_soft_body_point(PhysicsWorld* world, int32_t sbId, int pointIdx, float x, float y);
 FLASH_API void set_soft_body_params(PhysicsWorld* world, int32_t sbId, float pressure, float stiffness);
 

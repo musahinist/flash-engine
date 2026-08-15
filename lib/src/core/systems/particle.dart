@@ -1,5 +1,6 @@
-import 'dart:math';
 import 'dart:ui';
+
+import 'package:meta/meta.dart' show visibleForTesting;
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:vector_math/vector_math_64.dart';
@@ -410,7 +411,6 @@ class ParticleEmitterConfig {
 class FParticleEmitter extends FNode {
   late final Pointer<ParticleEmitter> _nativeEmitter;
   final int maxParticles;
-  final Random _random = Random();
 
   ParticleEmitterConfig config;
   bool emitting;
@@ -460,8 +460,14 @@ class FParticleEmitter extends FNode {
     if (!_disabled) _nativeEmitter.ref.shapeType = value;
   }
 
+  Vector3? _lastGravity;
+
   void _updateNativeGravity() {
     if (_disabled) return;
+    // Config gravity rarely changes; this used to write three floats across
+    // the boundary every frame regardless.
+    if (_lastGravity == config.gravity) return;
+    _lastGravity = config.gravity.clone();
     _nativeEmitter.ref.gravityX = config.gravity.x;
     _nativeEmitter.ref.gravityY = config.gravity.y;
     _nativeEmitter.ref.gravityZ = config.gravity.z;
@@ -491,17 +497,30 @@ class FParticleEmitter extends FNode {
   void process(double dt) {
     if (_disabled) return;
 
-    // Update native gravity in case it changed
     _updateNativeGravity();
 
-    // 1. Emit new particles
+    // 1. Emit new particles — one call for the whole burst.
     if (emitting && (config.loop || _burstSpawned < maxParticles)) {
       _emissionAccumulator += dt * config.emissionRate;
-      while (_emissionAccumulator >= 1 && activeCount < maxParticles) {
-        if (!config.loop && _burstSpawned >= maxParticles) break;
-        _spawnParticle();
-        if (!config.loop) _burstSpawned++;
-        _emissionAccumulator -= 1;
+      var wanted = _emissionAccumulator.floor();
+      if (wanted > 0) {
+        final room = maxParticles - activeCount;
+        if (!config.loop) {
+          final remainingBurst = maxParticles - _burstSpawned;
+          if (wanted > remainingBurst) wanted = remainingBurst;
+        }
+        if (wanted > room) wanted = room;
+
+        if (wanted > 0) {
+          _writeEmitParams();
+          final spawned = native.emitParticles(_nativeEmitter, _emitParams, wanted, _nextSeed());
+          if (!config.loop) _burstSpawned += spawned;
+          _emissionAccumulator -= spawned;
+        } else {
+          // Buffer is full; drop the backlog rather than letting the
+          // accumulator grow without bound.
+          _emissionAccumulator = 0;
+        }
       }
     }
 
@@ -509,43 +528,47 @@ class FParticleEmitter extends FNode {
     native.updateParticles(_nativeEmitter, dt);
   }
 
-  void _spawnParticle() {
-    final lifetime = _randomRange(config.lifetimeMin, config.lifetimeMax);
-    final size = _randomRange(config.sizeMin, config.sizeMax);
+  /// Reusable parameter block. Allocated once per emitter rather than built
+  /// per particle.
+  late final Pointer<native.EmitParams> _emitParams = calloc<native.EmitParams>();
 
-    final baseVelocity = Vector3(
-      _randomRange(config.velocityMin.x, config.velocityMax.x),
-      _randomRange(config.velocityMin.y, config.velocityMax.y),
-      _randomRange(config.velocityMin.z, config.velocityMax.z),
-    );
-
-    if (config.spreadAngle > 0) {
-      final spreadX = _randomRange(-config.spreadAngle, config.spreadAngle);
-      final spreadZ = _randomRange(-config.spreadAngle, config.spreadAngle);
-      final rotX = Matrix4.rotationX(spreadX);
-      final rotZ = Matrix4.rotationZ(spreadZ);
-      baseVelocity.applyMatrix4(rotX);
-      baseVelocity.applyMatrix4(rotZ);
-    }
-
-    // Pass to C++
-    native.spawnParticle(
-      _nativeEmitter,
-      worldPosition.x,
-      worldPosition.y,
-      worldPosition.z,
-      baseVelocity.x,
-      baseVelocity.y,
-      baseVelocity.z,
-      lifetime,
-      size,
-      config.startColor.value,
-    );
+  int _seed = 1;
+  int _nextSeed() {
+    _seed = (_seed * 1664525 + 1013904223) & 0xFFFFFFFF;
+    return _seed;
   }
 
-  double _randomRange(double min, double max) {
-    return min + _random.nextDouble() * (max - min);
+  /// The emission parameter block, filled from the current config. Exposed so
+  /// a test can drive `emit_particles` directly.
+  @visibleForTesting
+  Pointer<native.EmitParams> get debugEmitParams {
+    _writeEmitParams();
+    return _emitParams;
   }
+
+  void _writeEmitParams() {
+    final p = _emitParams.ref;
+    final origin = worldPosition;
+    p.originX = origin.x;
+    p.originY = origin.y;
+    p.originZ = origin.z;
+
+    p.velMinX = config.velocityMin.x;
+    p.velMinY = config.velocityMin.y;
+    p.velMinZ = config.velocityMin.z;
+    p.velMaxX = config.velocityMax.x;
+    p.velMaxY = config.velocityMax.y;
+    p.velMaxZ = config.velocityMax.z;
+
+    p.lifetimeMin = config.lifetimeMin;
+    p.lifetimeMax = config.lifetimeMax;
+    p.sizeMin = config.sizeMin;
+    p.sizeMax = config.sizeMax;
+
+    p.spreadAngle = config.spreadAngle;
+    p.color = config.startColor.toARGB32();
+  }
+
 
   bool _disposed = false;
   bool get isDisposed => _disposed;
@@ -559,6 +582,7 @@ class FParticleEmitter extends FNode {
       // IMPORTANT: Free native memory!
       calloc.free(_nativeEmitter.ref.particles);
       calloc.free(_nativeEmitter);
+      calloc.free(_emitParams);
     }
     super.dispose();
   }

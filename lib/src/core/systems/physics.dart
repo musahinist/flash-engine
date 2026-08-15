@@ -108,16 +108,14 @@ class FPhysicsSystem {
 
   /// Position of a body, in world units.
   ///
-  /// The pointer-out-param version of this was public API, which the project's
-  /// own FFI rules forbid; raw pointers stay on the native side of the fence.
+  /// Read straight from the body struct. There is an FFI entry point for this
+  /// (`get_body_position`), but it returns the same two fields that `rotation`
+  /// and `collisionCount` are already read from directly — so calling it cost
+  /// one crossing per body per frame for nothing.
   static Offset getBodyPosition(WorldId world, BodyId bodyId) {
-    native.getBodyPosition(world, bodyId, _scratchX, _scratchY);
-    return Offset(_scratchX.value, _scratchY.value);
+    final b = _getBodyPtr(world, bodyId).ref;
+    return Offset(b.x, b.y);
   }
-
-  // Reused across calls: allocating per frame would churn native memory.
-  static final Pointer<Float> _scratchX = calloc<Float>();
-  static final Pointer<Float> _scratchY = calloc<Float>();
 
   // Helper to access body struct safely via ID
   static Pointer<NativeBody> _getBodyPtr(WorldId world, BodyId bodyId) {
@@ -410,10 +408,25 @@ class FSoftBody extends FNode {
     _syncFromNative();
   }
 
+  /// Scratch buffers for the batch read, sized once per soft body.
+  late final Pointer<Float> _pointsX = calloc<Float>(pointCount);
+  late final Pointer<Float> _pointsY = calloc<Float>(pointCount);
+
   void _syncFromNative() {
-    for (int i = 0; i < pointCount; i++) {
-      points[i] = FPhysicsSystem.getSoftBodyPointPos(world, id, i);
+    // One crossing for the whole body. Reading point by point cost an FFI call
+    // plus two calloc/free pairs each — for a 32-point body across four soft
+    // bodies that was 128 calls and 512 heap operations every frame.
+    final count = native.getSoftBodyPoints(world, id, _pointsX, _pointsY, pointCount);
+    for (int i = 0; i < count; i++) {
+      points[i] = Offset(_pointsX[i], _pointsY[i]);
     }
+  }
+
+  @override
+  void dispose() {
+    calloc.free(_pointsX);
+    calloc.free(_pointsY);
+    super.dispose();
   }
 
   @override

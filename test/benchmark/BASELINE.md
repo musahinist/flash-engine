@@ -98,6 +98,42 @@ performance fix and is not counted as one. On the same evidence, replacing the
 `std::map` warm-start cache with a flat table was **dropped**: allocation is
 demonstrably not where the time goes here, so the risk is not worth it.
 
+## Phase 2 — batching the boundary
+
+| Change | Scenario | Before | After | |
+|---|---|---|---|---|
+| `emit_particles`: one call per burst, randomisation and spread rotation moved native | 100k particles (engine loop) | 0.303 ms | 0.109 ms | **−64% (2.8x)** |
+
+The old path spent one FFI crossing and roughly four Dart allocations *per
+particle*. At the 1M-particle target's emission rate that is ~500,000 crossings
+and ~2,000,000 allocations a second. The new path is one crossing per burst
+regardless of count, so it does not scale with particle count at all — the
+measured 2.8x at 100k understates it, because the old cost grows linearly from
+here and the new one does not.
+
+Also in phase 2, unmeasured individually but each removing per-item crossings:
+batch soft-body point reads (was one FFI call plus two calloc/free pairs *per
+point per frame*), `getBodyPosition` reading the struct directly instead of
+calling through FFI for fields already read that way, the camera matrix copied
+once per frame instead of once per emitter, and particle gravity written only
+when it changes.
+
+## Cumulative, against the original baseline
+
+| Scenario | baseline | after phases 1–2 | |
+|---|---|---|---|
+| empty scene | 0.028 ms | 0.023 ms | −18% |
+| 1000 static nodes | 0.053 ms | 0.050 ms | −6% |
+| 1000 moving nodes | 0.079 ms | 0.081 ms | noise |
+| deep hierarchy | 0.841 ms (p95 1.865) | 0.724 ms (p95 **1.211**) | −14% avg, **−35% p95** |
+| 500 rigid bodies | 1.059 ms | 0.973 ms | −8% |
+| 300 boxes stacking | 0.448 ms | 0.367 ms | −18% |
+| 100k particles | 0.281 ms | 0.109 ms | −61% |
+| particle vertex fill | 1.945 ms | 0.920 ms | −53% |
+
+The p95 improvement on deep hierarchies is the worldVersion gate: fewer
+boundary reads means fewer of the spikes that were setting the tail.
+
 ## Known bug found while testing
 
 Two **dynamic** boxes do not stack: they collapse into a single layer. Circles

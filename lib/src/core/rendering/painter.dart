@@ -57,8 +57,12 @@ class FPainter extends CustomPainter {
 
     // Render particles (after regular nodes for proper layering)
     engine.profiler.section('paint.particles', () {
+      if (emitters.isEmpty) return;
+      // The camera matrix is constant for the frame; it used to be copied into
+      // native memory once per emitter.
+      _writeMatrix(cameraMatrix);
       for (final emitter in emitters) {
-        _renderParticles(canvas, cameraMatrix, emitter);
+        _renderParticles(canvas, emitter);
       }
     });
   }
@@ -98,18 +102,19 @@ class FPainter extends CustomPainter {
     _bufferCapacity = target;
   }
 
-  void _renderParticles(Canvas canvas, Matrix4 cameraMatrix, FParticleEmitter emitter) {
+  static void _writeMatrix(Matrix4 matrix) {
+    final data = matrix.storage;
+    for (int i = 0; i < 16; i++) {
+      _matrixPtr[i] = data[i];
+    }
+  }
+
+  void _renderParticles(Canvas canvas, FParticleEmitter emitter) {
     if (!emitter.isActive) return;
     final count = emitter.activeCount;
     if (count == 0) return;
 
     _ensureCapacity(count);
-
-    // Copy matrix to native memory
-    final matrixData = cameraMatrix.storage;
-    for (int i = 0; i < 16; i++) {
-      _matrixPtr[i] = matrixData[i];
-    }
 
     final renderedCount = native.fillVertexBuffer(
       emitter.nativeEmitterPointer,

@@ -214,6 +214,27 @@ final class ParticleEmitter extends Struct {
   external int shapeType;
 }
 
+/// Everything an emission burst needs. Mirrors `EmitParams` in particles.h.
+final class EmitParams extends Struct {
+  @Float()
+  external double originX, originY, originZ;
+
+  @Float()
+  external double velMinX, velMinY, velMinZ;
+  @Float()
+  external double velMaxX, velMaxY, velMaxZ;
+
+  @Float()
+  external double lifetimeMin, lifetimeMax;
+  @Float()
+  external double sizeMin, sizeMax;
+
+  @Float()
+  external double spreadAngle;
+  @Uint32()
+  external int color;
+}
+
 // RayCast Struct (Must match C++ physics.h)
 final class RayCastHit extends Struct {
   @Int32()
@@ -348,6 +369,18 @@ external void spawnParticle(
   int color,
 );
 
+/// Spawns a whole burst in one call.
+///
+/// The per-particle [spawnParticle] path cost one FFI crossing and several
+/// Dart allocations per particle — at the 1M-particle target that was ~500k
+/// calls and ~2M allocations a second, which no amount of native speed could
+/// absorb.
+@Native<Int32 Function(Pointer<ParticleEmitter>, Pointer<EmitParams>, Int32, Uint32)>(
+  symbol: 'emit_particles',
+  isLeaf: true,
+)
+external int emitParticles(Pointer<ParticleEmitter> emitter, Pointer<EmitParams> params, int count, int seed);
+
 @Native<Int32 Function(Pointer<ParticleEmitter>, Pointer<Float>, Pointer<Float>, Pointer<Uint32>, Int32)>(
   symbol: 'fill_vertex_buffer',
   isLeaf: true,
@@ -430,6 +463,19 @@ external void getSoftBodyPoint(
   int pointIndex,
   Pointer<Float> outX,
   Pointer<Float> outY,
+);
+
+/// Reads every point of a soft body in one crossing.
+@Native<Int32 Function(Pointer<PhysicsWorld>, Int32, Pointer<Float>, Pointer<Float>, Int32)>(
+  symbol: 'get_soft_body_points',
+  isLeaf: true,
+)
+external int getSoftBodyPoints(
+  Pointer<PhysicsWorld> world,
+  int softBodyId,
+  Pointer<Float> outX,
+  Pointer<Float> outY,
+  int maxPoints,
 );
 
 @Native<Void Function(Pointer<PhysicsWorld>, Int32, Int32, Float, Float)>(symbol: 'set_soft_body_point', isLeaf: true)
