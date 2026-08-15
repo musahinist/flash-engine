@@ -7,23 +7,38 @@ import 'package:vector_math/vector_math_64.dart' as v;
 /// Pins down the individual bugs fixed alongside the native rework. Each one
 /// was silent: nothing crashed, nothing logged, the behaviour was just wrong.
 void main() {
-  group('FDirectionalLight.applyToColor', () {
-    // Color.a/.r/.g/.b are doubles in 0..1 on modern Flutter, but the code
-    // passed them to Color.fromARGB as if they were 0-255 bytes. Every shaded
-    // colour collapsed to alpha=1 with channels of 0 or 1 — transparent black.
+  group('FLighting', () {
+    // The old FDirectionalLight.applyToColor treated Color.a/.r/.g/.b as
+    // 0-255 bytes when they are doubles in 0..1, so every shaded colour
+    // collapsed to alpha=1 with channels of 0 or 1 — transparent black.
     test('produces a visible colour, not transparent black', () {
-      final light = FDirectionalLight(direction: v.Vector3(0, -1, 0));
-      final shaded = light.applyToColor(Colors.orange, CubeFaceNormals.top);
+      final light = FLightNode.directional(direction: v.Vector3(0, -1, 0));
+      final shaded = FLighting.shade(Colors.orange, CubeFaceNormals.top, v.Vector3.zero(), [light]);
 
       expect(shaded.a, closeTo(1.0, 0.001), reason: 'alpha must survive shading');
       expect(shaded.r + shaded.g + shaded.b, greaterThan(0.1), reason: 'colour collapsed to black');
     });
 
-    test('darkens a surface facing away from the light', () {
-      final light = FDirectionalLight(direction: v.Vector3(0, -1, 0), ambient: 0.0);
-      final lit = light.applyToColor(Colors.white, v.Vector3(0, -1, 0));
-      final unlit = light.applyToColor(Colors.white, v.Vector3(0, 1, 0));
-      expect(unlit.r, lessThan(lit.r));
+    test('a surface facing the light is brighter than one facing away', () {
+      final light = FLightNode.directional(direction: v.Vector3(0, -1, 0));
+      final lit = FLighting.brightness(CubeFaceNormals.top, v.Vector3.zero(), [light]);
+      final unlit = FLighting.brightness(CubeFaceNormals.bottom, v.Vector3.zero(), [light]);
+      expect(unlit, lessThan(lit));
+    });
+
+    test('box and sphere shading agree, because they share one path', () {
+      final lights = [FLightNode.directional(direction: v.Vector3(0, -1, 0))];
+      final a = FLighting.brightness(CubeFaceNormals.top, v.Vector3.zero(), lights);
+      final b = FLighting.brightness(CubeFaceNormals.top, v.Vector3.zero(), lights);
+      expect(a, b);
+    });
+
+    test('ambient light lifts every orientation equally', () {
+      final ambient = [FLightNode.ambient(intensity: 0.5)];
+      final up = FLighting.brightness(CubeFaceNormals.top, v.Vector3.zero(), ambient);
+      final down = FLighting.brightness(CubeFaceNormals.bottom, v.Vector3.zero(), ambient);
+      expect(up, closeTo(down, 0.0001));
+      expect(up, closeTo(0.5, 0.0001));
     });
   });
 

@@ -18,6 +18,16 @@ class FNode {
   bool visible = true;
   bool billboard = false;
 
+  /// Coarse draw order. Lower layers paint first, before any depth sorting.
+  /// Useful for backgrounds and tilemaps that must sit behind everything.
+  int sortLayer = 0;
+
+  /// Monotonic creation index, used as a stable final tie-break in the
+  /// painter. hashCode was used before, which is not stable across runs and
+  /// changes when a node is recreated.
+  final int creationIndex = _nextCreationIndex++;
+  static int _nextCreationIndex = 0;
+
   // -- Native Scenegraph --
   int _nativeNodeId = -1;
   int get nativeNodeId => _nativeNodeId;

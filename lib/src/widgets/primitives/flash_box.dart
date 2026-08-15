@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/graph/node.dart';
+import '../../core/rendering/light.dart';
 import '../framework.dart';
 
 class FBox extends FNodeWidget {
@@ -50,24 +51,8 @@ class _BoxNode extends FNode {
 
   @override
   void draw(Canvas canvas) {
-    // Basic brightness logic
-    double brightness = lights.isEmpty ? 1.0 : 0.2;
-
-    if (lights.isNotEmpty) {
-      final worldPos = worldPosition;
-      final normal = worldMatrix.forward..normalize();
-
-      for (final light in lights) {
-        final lightPos = light.worldPosition;
-        final lightDir = (lightPos - worldPos)..normalize();
-        final dot = normal.dot(lightDir);
-        if (dot > 0) {
-          brightness += dot * light.intensity;
-        }
-      }
-    }
-
-    brightness = brightness.clamp(0.0, 1.0);
+    // Shared shading, so a box and a sphere under the same lights agree.
+    final brightness = FLighting.brightness(worldMatrix.forward.normalized(), worldPosition, lights);
 
     // Update paint - use withOpacity for better compatibility and simplicity
     if (color != _lastColor || brightness != _lastBrightness) {

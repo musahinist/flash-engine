@@ -35,15 +35,18 @@ class FPainter extends CustomPainter {
     // Z-Sorting (Painter's Algorithm: Back-to-Front)
     // Draw distant objects (Low Z) first, then close objects (High Z) on top.
     flatList.sort((a, b) {
-      final az = a.worldPosition.z;
-      final bz = b.worldPosition.z;
-      // 1. Sort by Z Ascending (Back to Front)
-      final cmp = az.compareTo(bz);
+      // 1. Explicit layer wins, so backgrounds stay behind regardless of depth.
+      final layer = a.sortLayer.compareTo(b.sortLayer);
+      if (layer != 0) return layer;
+
+      // 2. Then depth, back to front.
+      final cmp = a.worldPosition.z.compareTo(b.worldPosition.z);
       if (cmp != 0) return cmp;
 
-      // 2. Stable Tie-Breaker: If Z is equal, sort by hashCode (Creation/Memory order)
-      // This prevents Z-fighting flickering for objects on the same plane.
-      return a.hashCode.compareTo(b.hashCode);
+      // 3. Creation order as the final tie-break. hashCode was used here,
+      // which is not stable between runs, so co-planar objects could swap
+      // draw order from one launch to the next.
+      return a.creationIndex.compareTo(b.creationIndex);
     });
 
     for (final node in flatList) {

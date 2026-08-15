@@ -44,3 +44,8 @@ export 'effects/flash_rope_widget.dart';
 // Export Animation
 export 'animation/flash_tween_builder.dart';
 export 'animation/flash_animated.dart';
+
+// Export grid widgets
+export 'grids/flash_grid_view.dart';
+export 'grids/flash_cell.dart';
+export 'grids/flash_tilemap.dart';

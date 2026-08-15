@@ -5,6 +5,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import '../graph/node.dart';
 import '../graph/tree.dart';
+import '../grids/tilemap_node.dart';
 import '../rendering/camera.dart';
 import '../rendering/light.dart';
 import '../systems/physics.dart';
@@ -190,6 +191,7 @@ class FEngine extends ChangeNotifier {
     // Update Audio Listener
     audio.updateListener(activeCamera!);
 
+    _updateTileMaps();
     _prepareRender();
 
     notifyListeners();
@@ -200,6 +202,22 @@ class FEngine extends ChangeNotifier {
     for (final listener in List.of(_updateListeners)) {
       listener(dt);
     }
+  }
+
+  /// Hands each tilemap the region it needs to draw. Doing this once per
+  /// frame keeps the culling decision in one place instead of every tilemap
+  /// reaching for the camera itself.
+  void _updateTileMaps() {
+    final camera = activeCamera;
+    if (camera == null || viewportSize.x <= 0) return;
+    tree.callGroup(FTileMapNode.group, (node) {
+      if (node is FTileMapNode) {
+        node.visibleRect = camera.getVisibleWorldRect(viewportSize).translate(
+          -node.worldPosition.x,
+          -node.worldPosition.z,
+        );
+      }
+    });
   }
 
   void _prepareRender() {

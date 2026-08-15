@@ -24,7 +24,6 @@ export 'graph/raycast_2d.dart';
 export 'graph/timer.dart';
 export 'grids/grids.dart';
 export 'animation/cube_roller.dart';
-export 'lighting/directional_light.dart';
 export 'procedural/procedural_generator.dart';
 export 'procedural/tilemap.dart';
 export 'procedural/grid_ai.dart';

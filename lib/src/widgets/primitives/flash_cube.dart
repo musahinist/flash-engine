@@ -82,3 +82,19 @@ class FCube extends StatelessWidget {
     );
   }
 }
+
+/// Outward face normals of a unit cube, in the engine's Y-up convention.
+///
+/// `top` and `bottom` were previously (0, -1, 0) and (0, 1, 0) — a Y-down
+/// leftover that shaded the top face as though it were the underside.
+abstract final class CubeFaceNormals {
+  static final v.Vector3 front = v.Vector3(0, 0, 1);
+  static final v.Vector3 back = v.Vector3(0, 0, -1);
+  static final v.Vector3 top = v.Vector3(0, 1, 0);
+  static final v.Vector3 bottom = v.Vector3(0, -1, 0);
+  static final v.Vector3 left = v.Vector3(-1, 0, 0);
+  static final v.Vector3 right = v.Vector3(1, 0, 0);
+
+  static List<v.Vector3> get all => [front, back, top, bottom, left, right];
+  static const List<String> names = ['front', 'back', 'top', 'bottom', 'left', 'right'];
+}
