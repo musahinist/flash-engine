@@ -150,6 +150,16 @@ C++ lives in `src/native/` and is built by `hook/build.dart`. Changing it requir
 
 `test/native_abi_test.dart` is the one to watch: the Dart bindings mirror the C++ structs field by field, and a layout change on one side only corrupts reads silently instead of failing to compile.
 
+### Measuring
+
+```bash
+flutter test test/benchmark/engine_benchmark.dart
+```
+
+It is not named `*_test.dart`, so `flutter test` skips it — it is slow and it prints rather than asserts. `FEngine.profiler` is off by default; the harness turns it on and reports per-section cost for scenes at the engine's target scale.
+
+`test/benchmark/BASELINE.md` holds the numbers, and the rule that produced them: measure before claiming. It records the changes that turned out to be worth nothing, the scenario too noisy to attribute anything to, and the estimate that ranked two optimisations the wrong way round — those are the useful parts.
+
 ## License
 
 MIT
