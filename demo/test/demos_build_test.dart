@@ -1,6 +1,7 @@
 import 'package:demo/examples/solar_system.dart';
 import 'package:demo/main.dart';
 import 'package:demo/shared/demo_catalog.dart';
+import 'package:demo/shared/demo_controls.dart';
 import 'package:demo/shared/demo_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
@@ -184,6 +185,78 @@ void main() {
 
       expect(after, isNot(equals(before)),
           reason: '"${entry.title}" did not move over a second of frames');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      tester.takeException();
+    }
+  });
+
+  testWidgets('pressing a control never leaves a demo empty', (tester) async {
+    // Basic Scene's "Rebuild scene" cleared its shape list and waited for
+    // FScene.onInit to run again. onInit runs *once*, when the viewport is
+    // first measured — so the scene emptied and never came back. Pressing a
+    // button and watching the demo disappear is about the worst thing a
+    // catalogue of examples can do, and nothing here was checking it.
+    //
+    // Buttons that say "Clear" are meant to empty the scene, so they are the
+    // one exception.
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const FlashDemoApp());
+
+    for (final entry in catalogueEntries(tester)) {
+      await tester.pumpWidget(
+        MaterialApp(theme: DemoTheme.materialTheme(), home: Builder(builder: entry.builder)),
+      );
+      for (int i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      tester.takeException();
+
+      final engine = _engineOf(tester);
+      if (engine == null) continue;
+
+      // Count only nodes with geometry. Checking `renderNodes.isNotEmpty` is
+      // not enough: a collapsed scene still keeps its camera, so the list
+      // reads as length 1 and the assertion sails through. That is exactly
+      // how this test missed the bug it was written for the first time.
+      int drawable() =>
+          _engineOf(tester)?.renderNodes.where((n) => n.bounds != null).length ?? 0;
+
+      final before = drawable();
+      if (before == 0) continue;
+
+      final count = find.byType(DemoButton).evaluate().length;
+      for (int i = 0; i < count; i++) {
+        final button = tester.widgetList<DemoButton>(find.byType(DemoButton)).elementAt(i);
+        if (button.onPressed == null) continue;
+        if (button.label.toLowerCase().contains('clear')) continue;
+
+        await tester.tap(find.byType(DemoButton).at(i), warnIfMissed: false);
+        for (int j = 0; j < 6; j++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        tester.takeException();
+
+        if (drawable() > 0) continue;
+
+        // Nothing left to draw. That is legitimate for a toggle that hides a
+        // layer — as long as pressing it again brings the scene back. It is
+        // not legitimate for a control that destroys the scene outright, which
+        // is what "Rebuild scene" was doing.
+        await tester.tap(find.byType(DemoButton).at(i), warnIfMissed: false);
+        for (int j = 0; j < 6; j++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        tester.takeException();
+
+        expect(drawable(), greaterThan(0),
+            reason: '"${entry.title}": "${button.label}" emptied the scene and '
+                'pressing it again did not bring it back');
+      }
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

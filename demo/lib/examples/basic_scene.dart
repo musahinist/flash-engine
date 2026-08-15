@@ -27,6 +27,12 @@ class _BasicSceneExampleState extends State<BasicSceneExample> {
   final Random _random = Random(42);
   final List<_ShapeData> _shapes = [];
 
+  /// Remembered from [FScene.onInit], because that runs *once* — it is the
+  /// hook for "the viewport is known now", not a rebuild callback. The rebuild
+  /// button used to just clear the list and wait for onInit to fire again,
+  /// which it never does: the shapes vanished and never came back.
+  v.Vector2? _viewport;
+
   bool _lit = true;
   bool _spin = true;
 
@@ -41,34 +47,23 @@ class _BasicSceneExampleState extends State<BasicSceneExample> {
         DemoButton(
           label: 'Rebuild scene',
           icon: Icons.casino_rounded,
-          onPressed: () => setState(_shapes.clear),
+          onPressed: _viewport == null ? null : _rebuild,
         ),
       ],
       readouts: [DemoStat(label: 'Shapes', value: '${_shapes.length}')],
       hint: 'Shapes are placed relative to the viewport, from FScene.onInit.',
       scene: FScene(
-        // Runs once the viewport is measured. Clearing _shapes makes it run
-        // again, which is how the rebuild button works.
+        // Runs once, as soon as the viewport has been measured.
         onInit: (engine, viewport) {
-          if (_shapes.isNotEmpty) return;
-
-          final worldWidth = viewport.x * 0.5;
-          final worldHeight = viewport.y * 0.4;
-
-          for (int i = 0; i < 15; i++) {
-            _shapes.add(
-              _ShapeData(
-                type: i % 5,
-                color: HSLColor.fromAHSL(1, i * 24.0, 0.7, 0.58).toColor(),
-                size: 20.0 + _random.nextDouble() * 25.0,
-                position: v.Vector3(
-                  (_random.nextDouble() - 0.5) * worldWidth,
-                  (_random.nextDouble() - 0.5) * worldHeight,
-                  (_random.nextDouble() - 0.5) * 150,
-                ),
-              ),
-            );
-          }
+          _viewport = viewport;
+          if (_shapes.isEmpty) _populate(viewport);
+          // onInit fires while the frame is being laid out, so the rebuild
+          // that enables the button has to wait for it to finish. Without
+          // this the viewport is known but the UI never hears about it, and
+          // the button sits disabled forever.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {});
+          });
         },
         sceneBuilder: (context, elapsed) {
           if (_shapes.isEmpty) return const [];
@@ -92,6 +87,32 @@ class _BasicSceneExampleState extends State<BasicSceneExample> {
       ),
     );
   }
+
+  /// Lays out a fresh set of shapes for a viewport of this size.
+  void _populate(v.Vector2 viewport) {
+    final worldWidth = viewport.x * 0.5;
+    final worldHeight = viewport.y * 0.4;
+
+    _shapes.clear();
+    for (int i = 0; i < 15; i++) {
+      _shapes.add(
+        _ShapeData(
+          type: i % 5,
+          color: HSLColor.fromAHSL(1, i * 24.0, 0.7, 0.58).toColor(),
+          size: 20.0 + _random.nextDouble() * 25.0,
+          position: v.Vector3(
+            (_random.nextDouble() - 0.5) * worldWidth,
+            (_random.nextDouble() - 0.5) * worldHeight,
+            (_random.nextDouble() - 0.5) * 150,
+          ),
+        ),
+      );
+    }
+  }
+
+  /// The random source carries on where it left off, so every press gives a
+  /// different arrangement rather than the same one back.
+  void _rebuild() => setState(() => _populate(_viewport!));
 
   Widget _buildShape(_ShapeData shape, double elapsed) {
     final rotation = v.Vector3(
