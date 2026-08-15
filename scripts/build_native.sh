@@ -1,4 +1,7 @@
 #!/bin/bash
+# Exit on any failure: previously only the macOS build's exit code was checked,
+# so a broken iOS Simulator build reported success.
+set -euo pipefail
 
 # Configuration
 SOURCE_DIR="src/native"

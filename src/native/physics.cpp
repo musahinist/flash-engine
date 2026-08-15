@@ -2,7 +2,9 @@
 #include "broadphase.h"
 #include "joints.h"
 #include <cmath>
+#include <cstdlib>
 #include <algorithm>
+#include <map>
 #include <vector>
 
 #define PI 3.14159265359f
@@ -26,8 +28,6 @@ inline Vec2 rotate(Vec2 v, float angle) {
     return { v.x * c - v.y * s, v.x * s + v.y * c };
 }
 
-#include <map>
-
 // Internal cache for warm starting
 // Key: (minId << 32) | maxId
 // Value: Stored impulses for the contact point
@@ -37,10 +37,19 @@ struct CachedImpulse {
 };
 using ImpulseCache = std::map<uint64_t, CachedImpulse>;
 
+// Key layout: [minId:24][maxId:24][pointIndex:8], order-independent in the
+// body pair. The previous packing was (minId<<32)|(maxId<<4)|j, whose maxId
+// field overlapped minId's bits once maxId reached 2^28 — a silent collision
+// that would hand a contact the wrong cached impulse.
+static inline uint64_t contact_cache_key(uint32_t bodyA, uint32_t bodyB, int pointIndex) {
+    uint64_t lo = std::min(bodyA, bodyB);
+    uint64_t hi = std::max(bodyA, bodyB);
+    return (lo << 40) | (hi << 8) | (uint64_t)(pointIndex & 0xFF);
+}
+
 extern "C" {
 
 PhysicsWorld* create_physics_world(int maxBodies) {
-    fprintf(stderr, "DEBUG: create_physics_world entry. Max: %d\n", maxBodies);
     // Use calloc to ensure all fields are zeroed (prevents uninitialized garbage)
     PhysicsWorld* world = (PhysicsWorld*)calloc(1, sizeof(PhysicsWorld));
     if (!world) return NULL;
@@ -88,19 +97,27 @@ PhysicsWorld* create_physics_world(int maxBodies) {
 
 void destroy_physics_world(PhysicsWorld* world) {
     if (!world) return;
-    delete[] world->bodies;
-    delete[] world->manifolds;
-    delete[] world->constraints;
-    destroy_dynamic_tree(world->tree);
-    delete[] world->boxJoints;
-    
-    for (int i = 0; i < world->activeSoftBodies; ++i) {
-        delete[] world->softBodies[i].points;
-        delete[] world->softBodies[i].constraints;
-    }
-    delete[] world->softBodies;
 
-    delete world;
+    // Every block below is allocated with calloc() in create_physics_world /
+    // create_soft_body, so it must be released with free(). Mixing the
+    // malloc family with delete is undefined behaviour.
+    free(world->bodies);
+    free(world->manifolds);
+    free(world->constraints);
+    destroy_dynamic_tree(world->tree);
+    free(world->boxJoints);
+
+    for (int i = 0; i < world->activeSoftBodies; ++i) {
+        free(world->softBodies[i].points);
+        free(world->softBodies[i].constraints);
+    }
+    free(world->softBodies);
+
+    // The warm-start cache is a real C++ object (new'd std::map), so it is
+    // the one allocation here that genuinely needs delete.
+    delete static_cast<ImpulseCache*>(world->warmStartCache);
+
+    free(world);
 }
 
 struct CollisionManifold {
@@ -424,15 +441,13 @@ void step_physics(PhysicsWorld* world, float dt) {
              
              for (int j = 0; j < c.pointCount; j++) {
                  ContactConstraintPoint& cp = c.points[j];
-                 // Generate ID for this contact point (Pair ID + Index)
                  // Typically manifolds persist but points might shift.
                  // For now, assume point index stability (Box2D style requires feature IDs, we use simple index)
-                 uint64_t minId = std::min(c.bodyA, c.bodyB);
-                 uint64_t maxId = std::max(c.bodyA, c.bodyB);
-                 uint64_t key = (minId << 32) | (maxId << 4) | j; // Use 4 bits for index (up to 16 points)
-                 
-                 if (cache->count(key)) {
-                     CachedImpulse& imp = (*cache)[key];
+                 uint64_t key = contact_cache_key(c.bodyA, c.bodyB, j);
+
+                 auto it = cache->find(key);
+                 if (it != cache->end()) {
+                     CachedImpulse& imp = it->second;
                      cp.normalImpulse = imp.normalImpulse;
                      cp.tangentImpulse = imp.tangentImpulse;
                      
@@ -506,17 +521,17 @@ void step_physics(PhysicsWorld* world, float dt) {
         solve_joint_velocity_constraints(world);
     }
     
-    // Store impulses for next frame
+    // Store impulses for next frame.
+    // Rebuild from scratch: the cache must hold only pairs that are actually
+    // touching this step. Without the clear it grows without bound, keeping an
+    // entry for every pair that has ever collided during the session.
+    cache->clear();
     if (world->enableWarmStarting) {
          for (int i = 0; i < world->activeConstraints; ++i) {
             ContactConstraint& c = world->constraints[i];
             for (int j = 0; j < c.pointCount; ++j) {
                  ContactConstraintPoint& cp = c.points[j];
-                 uint64_t minId = std::min(c.bodyA, c.bodyB);
-                 uint64_t maxId = std::max(c.bodyA, c.bodyB);
-                 uint64_t key = (minId << 32) | (maxId << 4) | j;
-                 
-                 (*cache)[key] = {cp.normalImpulse, cp.tangentImpulse};
+                 (*cache)[contact_cache_key(c.bodyA, c.bodyB, j)] = {cp.normalImpulse, cp.tangentImpulse};
             }
          }
     }
@@ -565,7 +580,12 @@ void step_physics(PhysicsWorld* world, float dt) {
     }
 }
 
-// Removed get_physics_version from here
+// Version handshake. Dart uses this as a cheap, side-effect-free probe to
+// decide whether the native core is available (see FlashNative.isAvailable).
+// Bump when the exported ABI changes.
+int32_t get_physics_version() {
+    return FLASH_ABI_VERSION;
+}
 
 int32_t create_body(PhysicsWorld* world, int type, int shapeType, float x, float y, float w, float h, float rotation, uint32_t categoryBits, uint32_t maskBits) {
     if (!world || world->activeCount >= world->maxBodies) return -1;
@@ -648,7 +668,6 @@ int32_t create_soft_body(PhysicsWorld* world, int pointCount, float* initialX, f
     // Create neighbor constraints
     sb.constraintCount = pointCount + (pointCount / 2); // Perimeter + some interior supports
     // Debug print
-    fprintf(stderr, "DEBUG: creating soft body %d. Points: %d. Constraints: %d\n", id, pointCount, sb.constraintCount);
     sb.constraints = (SoftBodyConstraint*)calloc(sb.constraintCount, sizeof(SoftBodyConstraint));
     
     int cIdx = 0;
@@ -794,14 +813,10 @@ void step_soft_body(PhysicsWorld* world, float dt) {
         }
 
         // 4. Collision with Rigid Bodies
-        // Debug print to see if we are even checking
-        fprintf(stderr, "Checking soft body %d against %d rigid bodies\n", i, world->activeCount);
-        
         for (int bIdx = 0; bIdx < world->activeCount; bIdx++) {
             NativeBody& b = world->bodies[bIdx];
-            fprintf(stderr, "  Checking Body %d: Type=%d Shape=%d W=%f H=%f Y=%f\n", b.id, b.type, b.shapeType, b.width, b.height, b.y);
 
-            if (b.type == 0 && b.shapeType == 1 && b.width > 1000) { 
+            if (b.type == 0 && b.shapeType == 1 && b.width > 1000) {
                 // Optimization: For huge static ground, use simple plane check if possible?
                 // Actually, let's just do generic checks.
             }

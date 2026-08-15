@@ -58,6 +58,8 @@ final class NativeNode extends Struct {
   external int dirty;
   @Uint32()
   external int worldVersion;
+  @Int32()
+  external int alive;
 }
 
 final class NativeScene extends Struct {
@@ -68,6 +70,10 @@ final class NativeScene extends Struct {
   external int activeCount;
   @Uint32()
   external int totalUpdates;
+
+  external Pointer<Int32> freeList;
+  @Int32()
+  external int freeCount;
 }
 
 final class PhysicsWorld extends Struct {
@@ -109,12 +115,6 @@ final class PhysicsWorld extends Struct {
   external int maxConstraints;
   @Int32()
   external int activeConstraints;
-
-  external Pointer<Void> joints;
-  @Int32()
-  external int maxJoints;
-  @Int32()
-  external int activeJoints;
 
   external Pointer<Void> softBodies;
   @Int32()
@@ -300,6 +300,7 @@ class FlashNativeParticles {
   static Pointer<NativeScene> Function(int)? createNativeScene;
   static void Function(Pointer<NativeScene>)? destroyNativeScene;
   static int Function(Pointer<NativeScene>, int)? createNativeNode;
+  static void Function(Pointer<NativeScene>, int)? destroyNativeNode;
   static void Function(Pointer<NativeScene>)? updateSceneTransforms;
 
   // RayCast
@@ -419,6 +420,10 @@ class FlashNativeParticles {
     createNativeNode = _lib!
         .lookupFunction<Int32 Function(Pointer<NativeScene>, Int32), int Function(Pointer<NativeScene>, int)>(
           'create_native_node',
+        );
+    destroyNativeNode = _lib!
+        .lookupFunction<Void Function(Pointer<NativeScene>, Int32), void Function(Pointer<NativeScene>, int)>(
+          'destroy_native_node',
         );
     updateSceneTransforms = _lib!
         .lookupFunction<Void Function(Pointer<NativeScene>), void Function(Pointer<NativeScene>)>(

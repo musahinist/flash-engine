@@ -1,11 +1,14 @@
 name: flash
-description: "A new Flutter package project."
+description: >-
+  Declarative, node-based 2.5D game engine for Flutter with a native C++
+  physics and particle core, inspired by Godot.
 version: 0.0.1
-homepage:
+repository: https://github.com/musahinist/flash-engine
+issue_tracker: https://github.com/musahinist/flash-engine/issues
 
 environment:
   sdk: ^3.10.4
-  flutter: ">=1.17.0"
+  flutter: ">=3.35.0"
 
 dependencies:
   flutter:
@@ -13,7 +16,6 @@ dependencies:
   vector_math: ^2.1.4
   audioplayers: ^6.0.0
   ffi: ^2.1.0
-  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:

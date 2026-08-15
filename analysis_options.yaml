@@ -1,4 +1,18 @@
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # Local copies of reference engines (Godot / Box2D / Jolt / Flame).
+    # Not part of this project and not tracked by git.
+    - other_repo/**
+    - build/**
+    - demo/build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

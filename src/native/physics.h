@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <vector>
 
+// Bumped whenever the exported C ABI changes (struct layout, signatures).
+// Dart mirrors this in FlashNative and checks it at load time.
+#define FLASH_ABI_VERSION 1
+
 extern "C" {
 
 enum BodyType {
@@ -107,14 +111,6 @@ struct ContactManifold {
     int active; // Using int for stable FFI alignment
 };
 
-struct NativeJoint {
-    int type; // 0 = Distance Joint
-    uint32_t bodyA;
-    uint32_t bodyB;
-    float targetDistance;
-    float impulse;
-};
-
 struct PhysicsWorld {
     NativeBody* bodies;
     int maxBodies;
@@ -138,10 +134,6 @@ struct PhysicsWorld {
     ContactConstraint* constraints;
     int maxConstraints;
     int activeConstraints;
-
-    NativeJoint* joints;
-    int maxJoints;
-    int activeJoints;
 
     NativeSoftBody* softBodies;
     int maxSoftBodies;

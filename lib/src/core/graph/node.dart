@@ -141,13 +141,39 @@ class FNode {
     for (final child in children) {
       child.propagateExitTree();
     }
+
+    _releaseNativeNode();
     _tree = null;
+  }
+
+  /// Returns this node's slot to the native scene pool.
+  ///
+  /// The pool is fixed-size (10k slots). Without this, every add/remove cycle
+  /// burned a slot permanently and `create_native_node` eventually started
+  /// returning -1, silently dropping nodes onto the pure-Dart transform path.
+  void _releaseNativeNode() {
+    final ptr = _nativeNodePtr;
+    if (ptr == null || _nativeNodeId < 0) return;
+
+    final scene = _tree?.engine.nativeScene;
+    if (scene != null) {
+      FlashNativeParticles.destroyNativeNode?.call(scene, _nativeNodeId);
+    }
+
+    _nativeNodePtr = null;
+    _nativeNodeId = -1;
+    _lastFetchedVersion = -1;
+    // Fall back to Dart-side transform maths from here on.
+    _worldDirty = true;
+    _localSyncNeeded = true;
+    _cachedWorldPosition = null;
   }
 
   void dispose() {
     for (final child in children) {
       child.dispose();
     }
+    _releaseNativeNode();
   }
 
   void addChild(FNode child) {

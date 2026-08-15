@@ -85,16 +85,13 @@ class FPainter extends CustomPainter {
 
     if (renderedCount > 0) {
       // Get vertex multiplier based on shape
-      int vCount = 6;
-      final shape = emitter.shapeType;
-      if (shape == 1) {
-        vCount = 12; // Hexagon
-      } else if (shape == 2)
-        vCount = 18; // Octagon
-      else if (shape == 3)
-        vCount = 30; // 12-sided (Round)
-      else if (shape == 4)
-        vCount = 3; // Triangle (1M+ Ultra Performance)
+      final vCount = switch (emitter.shapeType) {
+        1 => 12, // Hexagon
+        2 => 18, // Octagon
+        3 => 30, // 12-sided (Round)
+        4 => 3, // Triangle (1M+ Ultra Performance)
+        _ => 6, // Quad (2 triangles)
+      };
 
       final totalVertices = renderedCount * vCount;
 

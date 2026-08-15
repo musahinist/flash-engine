@@ -23,6 +23,7 @@ struct NativeNode {
     int32_t visible;
     int32_t dirty;
     uint32_t worldVersion; // Track if worldMatrix is up-to-date
+    int32_t alive;         // 0 once the slot is released back to the free list
 };
 
 struct NativeScene {
@@ -30,11 +31,17 @@ struct NativeScene {
     int maxNodes;
     int activeCount;
     uint32_t totalUpdates; // Increment every time update_scene_transforms is called
+
+    // Released slot indices, reused by create_native_node before growing
+    // activeCount. Without this the node pool leaks on every remove/dispose.
+    int32_t* freeList;
+    int freeCount;
 };
 
 NativeScene* create_native_scene(int maxNodes);
 void destroy_native_scene(NativeScene* scene);
 int32_t create_native_node(NativeScene* scene, int32_t parentId);
+void destroy_native_node(NativeScene* scene, int32_t nodeId);
 void update_scene_transforms(NativeScene* scene);
 
 }
