@@ -1,7 +1,16 @@
-import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// The bundled [ParticleEmitterConfig] presets.
+///
+/// Every one of these is a plain config object — nothing is special-cased in
+/// the engine. Read `ParticleEmitterConfig.fire` and you have the whole recipe:
+/// lifetimes, a velocity box, gravity, a size range and a colour ramp.
 class ParticleDemoExample extends StatefulWidget {
   const ParticleDemoExample({super.key});
 
@@ -10,9 +19,7 @@ class ParticleDemoExample extends StatefulWidget {
 }
 
 class _ParticleDemoExampleState extends State<ParticleDemoExample> {
-  String _selectedPreset = 'Fire';
-
-  final Map<String, ParticleEmitterConfig> _presets = {
+  static final Map<String, ParticleEmitterConfig> _presets = {
     'Fire': ParticleEmitterConfig.fire,
     'Smoke': ParticleEmitterConfig.smoke,
     'Sparkle': ParticleEmitterConfig.sparkle,
@@ -33,79 +40,70 @@ class _ParticleDemoExampleState extends State<ParticleDemoExample> {
     'Steam': ParticleEmitterConfig.steam,
   };
 
+  String _selected = 'Fire';
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0d1b2a),
-      appBar: AppBar(title: const Text('Particle System Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      extendBodyBehindAppBar: true,
-      body: FView(
+    final config = _presets[_selected]!;
+
+    return DemoPage(
+      title: 'Particle Presets',
+      subtitle: 'Eighteen bundled configs. None of them is special-cased.',
+      accent: DemoTheme.warning,
+      controls: [
+        DemoPanel(
+          title: 'Preset',
+          tint: DemoTheme.warning,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final name in _presets.keys)
+                  DemoButton(
+                    label: name,
+                    tint: DemoTheme.warning,
+                    selected: name == _selected,
+                    onPressed: () => setState(() => _selected = name),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ],
+      readouts: [
+        DemoStat(label: 'Rate', value: '${config.emissionRate.round()}/s'),
+        DemoStat(label: 'Capacity', value: '${config.maxParticles}'),
+        DemoStat(
+          label: 'Lifetime',
+          value: '${config.lifetimeMin.toStringAsFixed(1)}'
+              '–${config.lifetimeMax.toStringAsFixed(1)}s',
+        ),
+        DemoStat(label: 'Shape', value: _shapeName(config.shapeType)),
+      ],
+      hint: 'The readout on the right is read straight off the selected config.',
+      scene: FView(
         child: Stack(
           children: [
-            // Camera
             FCamera(position: v.Vector3(0, 0, 500), fov: 60),
-
-            // Particle Emitter at center
             FParticles(
-              key: ValueKey(_selectedPreset), // Force rebuild on change
+              // A new key restarts the emitter rather than mutating a running
+              // one, which is what makes switching preset look clean.
+              key: ValueKey(_selected),
               initialPosition: v.Vector3(0, -50, 0),
-              config: _presets[_selectedPreset],
-            ),
-
-            // Preset selector UI
-            Positioned(
-              bottom: 20,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      '✨ Select Effect',
-                      style: TextStyle(color: Colors.orangeAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 80,
-                      child: SingleChildScrollView(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: _presets.keys.map((name) {
-                            final isSelected = _selectedPreset == name;
-                            return GestureDetector(
-                              onTap: () => setState(() => _selectedPreset = name),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? Colors.orangeAccent : Colors.white24,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  name,
-                                  style: TextStyle(
-                                    color: isSelected ? Colors.black : Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              config: config,
             ),
           ],
         ),
       ),
     );
   }
+
+  static String _shapeName(int shapeType) => switch (shapeType) {
+    1 => 'hexagon',
+    2 => 'octagon',
+    3 => 'round',
+    4 => 'triangle',
+    _ => 'quad',
+  };
 }

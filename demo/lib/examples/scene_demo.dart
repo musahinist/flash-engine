@@ -1,8 +1,18 @@
-import 'package:flutter/material.dart';
 import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
-/// Demonstrates scene management with transitions using engine.sceneManager
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// [FSceneManager]: named scenes with a transition between them.
+///
+/// The manager is a `Listenable`, and [FSceneTransitionWidget] already listens
+/// to it. This demo used to also register an engine update listener that called
+/// `setState` unconditionally every frame — which was both unnecessary and
+/// unbounded, since it ran inside `build` and so added another listener on
+/// every rebuild it caused.
 class SceneManagerDemoExample extends StatefulWidget {
   const SceneManagerDemoExample({super.key});
 
@@ -11,144 +21,94 @@ class SceneManagerDemoExample extends StatefulWidget {
 }
 
 class _SceneManagerDemoExampleState extends State<SceneManagerDemoExample> {
-  SceneTransition _selectedTransition = SceneTransition.fade;
-  bool _initialized = false;
+  static const List<SceneTransition> _transitions = SceneTransition.values;
 
-  final List<SceneTransition> _transitions = [
-    SceneTransition.fade,
-    SceneTransition.slideLeft,
-    SceneTransition.slideRight,
-    SceneTransition.slideUp,
-    SceneTransition.slideDown,
-    SceneTransition.scale,
-    SceneTransition.rotate,
-  ];
+  static const Map<String, ({IconData icon, String subtitle, Color colour})> _scenes = {
+    'menu': (icon: Icons.menu_rounded, subtitle: 'the title screen', colour: DemoTheme.accent),
+    'game': (icon: Icons.sports_esports_rounded, subtitle: 'playing', colour: DemoTheme.positive),
+    'settings': (icon: Icons.settings_rounded, subtitle: 'options', colour: DemoTheme.warning),
+  };
 
-  void _initScenes(FSceneManager sceneManager) {
-    if (_initialized) return;
-    _initialized = true;
+  SceneTransition _transition = SceneTransition.fade;
+  FSceneManager? _manager;
+  String _current = 'none';
 
-    // Register scenes with engine.sceneManager
-    sceneManager.registerScene(
-      FSceneWrapper(name: 'menu', onEnter: () => debugPrint('Menu entered'), onExit: () => debugPrint('Menu exited')),
-    );
+  void _register(FSceneManager manager) {
+    if (_manager != null) return;
+    _manager = manager;
 
-    sceneManager.registerScene(
-      FSceneWrapper(name: 'game', onEnter: () => debugPrint('Game entered'), onExit: () => debugPrint('Game exited')),
-    );
-
-    sceneManager.registerScene(
-      FSceneWrapper(
-        name: 'settings',
-        onEnter: () => debugPrint('Settings entered'),
-        onExit: () => debugPrint('Settings exited'),
-      ),
-    );
-
-    // Start at menu
-    sceneManager.goTo('menu', transition: SceneTransition.none);
+    for (final name in _scenes.keys) {
+      manager.registerScene(
+        FSceneWrapper(
+          name: name,
+          onEnter: () {
+            if (mounted) setState(() => _current = name);
+          },
+        ),
+      );
+    }
+    manager.goTo('menu', transition: SceneTransition.none);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0f0f23),
-      appBar: AppBar(title: const Text('Scene Manager Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      extendBodyBehindAppBar: true,
-      body: FView(
+    return DemoPage(
+      title: 'Scene Manager',
+      subtitle: 'Named scenes, and the transition between them.',
+      controls: [
+        DemoPanel(
+          title: 'Go to',
+          children: [
+            for (final name in _scenes.keys)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: DemoButton(
+                  label: name,
+                  icon: _scenes[name]!.icon,
+                  tint: _scenes[name]!.colour,
+                  selected: _current == name,
+                  width: 190,
+                  onPressed: () => _manager?.goTo(name, transition: _transition),
+                ),
+              ),
+          ],
+        ),
+        DemoPanel(
+          title: 'Transition',
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final t in _transitions)
+                  DemoButton(
+                    label: t.name,
+                    selected: t == _transition,
+                    onPressed: () => setState(() => _transition = t),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ],
+      readouts: [
+        DemoStat(label: 'Current', value: _current),
+        DemoStat(label: 'Transition', value: _transition.name),
+      ],
+      hint: 'onEnter and onExit fire per scene; the widget listens to the manager.',
+      scene: FView(
         child: Builder(
           builder: (context) {
-            final inherited = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
-            final engine = inherited?.engine;
-
-            if (engine == null) {
-              return const Center(
-                child: Text('Engine not found', style: TextStyle(color: Colors.white)),
-              );
-            }
-
-            // Initialize scenes using engine.sceneManager (auto-updated by engine)
-            _initScenes(engine.sceneManager);
-
-            // Listen to scene manager changes
-            engine.addUpdateListener((dt) => setState(() {}));
+            final engine = context.flash;
+            if (engine == null) return const SizedBox.shrink();
+            _register(engine.sceneManager);
 
             return Stack(
               children: [
-                // Camera
                 FCamera(position: v.Vector3(0, 0, 500), fov: 60),
-
-                // Scene content with transitions
                 FSceneTransitionWidget(
-                  sceneManager: engine.sceneManager, // Use engine's sceneManager
-                  builder: (scene) => _buildSceneContent(scene.name),
-                ),
-
-                // Controls
-                Positioned(
-                  bottom: 20,
-                  left: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Current scene indicator
-                        Text(
-                          '📍 Current: ${engine.sceneManager.currentScene?.name ?? "none"}',
-                          style: const TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Transition selector
-                        const Text('🎭 Transition:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 35,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: _transitions.map((t) {
-                              final isSelected = _selectedTransition == t;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _selectedTransition = t),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? Colors.greenAccent : Colors.white24,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Text(
-                                      t.name,
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.black : Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Scene buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildSceneButton(engine.sceneManager, 'menu', Icons.home, Colors.blueAccent),
-                            _buildSceneButton(engine.sceneManager, 'game', Icons.games, Colors.orangeAccent),
-                            _buildSceneButton(engine.sceneManager, 'settings', Icons.settings, Colors.purpleAccent),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  sceneManager: engine.sceneManager,
+                  builder: (scene) => _content(scene.name),
                 ),
               ],
             );
@@ -158,74 +118,23 @@ class _SceneManagerDemoExampleState extends State<SceneManagerDemoExample> {
     );
   }
 
-  Widget _buildSceneButton(FSceneManager sm, String name, IconData icon, Color color) {
-    final isActive = sm.currentScene?.name == name;
-    return GestureDetector(
-      onTap: () {
-        if (!isActive && !sm.isTransitioning) {
-          sm.goTo(name, transition: _selectedTransition, duration: 0.5);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: isActive ? color : color.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color, width: 2),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: isActive ? Colors.white : color, size: 28),
-            const SizedBox(height: 4),
-            Text(
-              name.toUpperCase(),
-              style: TextStyle(color: isActive ? Colors.white : color, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _content(String name) {
+    final scene = _scenes[name];
+    if (scene == null) return const SizedBox.shrink();
 
-  Widget _buildSceneContent(String name) {
-    switch (name) {
-      case 'menu':
-        return _buildScene(Icons.home, 'MENU', 'Welcome to Flash Engine!', Colors.blue);
-      case 'game':
-        return _buildScene(Icons.games, 'GAME', 'Your game content here!', Colors.orange);
-      case 'settings':
-        return _buildScene(Icons.settings, 'SETTINGS', 'Configure your preferences', Colors.purple);
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  Widget _buildScene(IconData icon, String title, String subtitle, MaterialColor color) {
     return Center(
-      child: Container(
-        padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [color.shade900, color.shade600],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(scene.icon, size: 96, color: scene.colour),
+          const SizedBox(height: DemoTheme.gapLarge),
+          Text(
+            name.toUpperCase(),
+            style: DemoTheme.title.copyWith(fontSize: 34, letterSpacing: 4, color: scene.colour),
           ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 30, spreadRadius: 5)],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 60),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-          ],
-        ),
+          const SizedBox(height: 4),
+          Text(scene.subtitle, style: DemoTheme.subtitle),
+        ],
       ),
     );
   }

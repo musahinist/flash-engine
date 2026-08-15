@@ -1,8 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:flash/flash.dart';
-import 'package:vector_math/vector_math_64.dart' as v;
 import 'dart:math';
 
+import 'package:flash/flash.dart';
+import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' as v;
+
+import '../shared/demo_controls.dart';
+import '../shared/demo_page.dart';
+import '../shared/demo_theme.dart';
+
+/// [FLineRenderer] and [FTrailRenderer].
+///
+/// The wavy line is drawn once from a fixed point list; the static bodies
+/// underneath it are separate, because a line renderer draws and does not
+/// collide. The trail is the interesting one: it records world positions as its
+/// parent moves, so it is attached to a physics body and left alone.
 class RenderingDemoExample extends StatefulWidget {
   const RenderingDemoExample({super.key});
 
@@ -11,188 +22,183 @@ class RenderingDemoExample extends StatefulWidget {
 }
 
 class _RenderingDemoExampleState extends State<RenderingDemoExample> {
-  final List<v.Vector3> _pathPoints = [];
   late final FPhysicsSystem _physicsWorld;
+  final List<v.Vector3> _pathPoints = [];
+
+  double _trailLifetime = 1.5;
+  bool _glow = true;
+  int _resetKey = 0;
 
   @override
   void initState() {
     super.initState();
     _physicsWorld = FPhysicsSystem(gravity: FPhysics.standardGravity);
-    _generateWavyPath();
+    for (int i = 0; i < 40; i++) {
+      _pathPoints.add(v.Vector3((i - 20) * 50.0, sin(i * 0.4) * 80.0 - 350.0, 0));
+    }
   }
 
   @override
   void dispose() {
+    // There was a dispose() here that called super and nothing else, so the
+    // native world — body pool, broadphase tree, solver scratch — leaked every
+    // time this demo was opened.
+    _physicsWorld.dispose();
     super.dispose();
-  }
-
-  void _generateWavyPath() {
-    _pathPoints.clear();
-    for (int i = 0; i < 40; i++) {
-      final x = (i - 20) * 50.0;
-      final y = sin(i * 0.4) * 80.0 - 350.0; // Offset ground to -350
-      _pathPoints.add(v.Vector3(x, y, 0));
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF020408),
-      appBar: AppBar(title: const Text('Renderers Demo'), backgroundColor: Colors.transparent, elevation: 0),
-      extendBodyBehindAppBar: true,
-      body: FView(
-        physicsWorld: _physicsWorld,
-        autoUpdate: true,
-        child: Stack(
+    return DemoPage(
+      title: 'Renderers',
+      subtitle: 'FLineRenderer draws a path; FTrailRenderer records one.',
+      controls: [
+        DemoPanel(
           children: [
-            FCamera(position: v.Vector3(0, 0, 1800), fov: 60, far: 5000),
+            DemoSlider(
+              label: 'Trail lifetime',
+              value: _trailLifetime,
+              min: 0.2,
+              max: 4,
+              fractionDigits: 2,
+              suffix: 's',
+              onChanged: (value) => setState(() => _trailLifetime = value),
+            ),
+          ],
+        ),
+        DemoToggle(label: 'Glow', value: _glow, onChanged: (v) => setState(() => _glow = v)),
+        DemoButton(
+          label: 'Relaunch ball',
+          icon: Icons.replay_rounded,
+          onPressed: () => setState(() => _resetKey++),
+        ),
+        DemoPanel(
+          title: 'Legend',
+          children: [
+            DemoLegend(
+              entries: const [
+                (color: DemoTheme.accentAlt, label: 'line renderer, gradient'),
+                (color: Colors.white24, label: 'line renderer, looped'),
+                (color: DemoTheme.warning, label: 'trail renderer on a body'),
+              ],
+            ),
+          ],
+        ),
+      ],
+      hint: 'The wavy line is drawn; the collision under it is separate static bodies.',
+      scene: FView(
+        physicsWorld: _physicsWorld,
+        child: FAnimated(
+          builder: (context, elapsed) {
+            // Was DateTime.now().millisecondsSinceEpoch, which ignores both the
+            // tree being paused and any time scaling. The engine's own elapsed
+            // time is right here.
+            final orbit = elapsed * 1.5;
 
-            // 1. LINE RENDERER: Ground + Physics Segments
-            FNodes(
-              position: v.Vector3.zero(),
+            return FNodes(
               children: [
+                FCamera(position: v.Vector3(0, 0, 1800), fov: 60, far: 5000),
+
                 FLineRenderer(
                   name: 'WavyPath',
                   points: _pathPoints,
                   width: 15,
-                  glow: true,
-                  gradient: const LinearGradient(colors: [Colors.purpleAccent, Colors.cyanAccent, Colors.purpleAccent]),
+                  glow: _glow,
+                  gradient: const LinearGradient(
+                    colors: [DemoTheme.accentAlt, DemoTheme.accent, DemoTheme.accentAlt],
+                  ),
                 ),
-                // Accurate collision segments
-                ..._buildPathSegments(),
-              ],
-            ),
+                ..._collisionSegments(),
 
-            // 2. LINE RENDERER: Pulsing Orbit
-            Builder(
-              builder: (context) {
-                final orbitRotation = (DateTime.now().millisecondsSinceEpoch / 1000.0) * 1.5;
-                return FNodeGroup(
+                FNodeGroup(
                   position: v.Vector3(0, 200, 0),
-                  rotation: v.Vector3(0, 0, orbitRotation),
-                  scale: v.Vector3.all(0.8 + sin(orbitRotation) * 0.2),
+                  rotation: v.Vector3(0, 0, orbit),
+                  scale: v.Vector3.all(0.8 + sin(orbit) * 0.2),
                   child: FLineRenderer(
                     name: 'CirclePath',
-                    points: _generateCirclePoints(150, 4),
+                    points: _circlePoints(150, 4),
                     isLoop: true,
                     width: 12,
                     color: Colors.white24,
                   ),
-                );
-              },
-            ),
+                ),
 
-            // 3. TRAIL RENDERER: Bouncing Physics Ball
-            FRigidBody.circle(
-              name: 'TrailBall',
-              position: v.Vector3(-300, 500, 0),
-              initialVelocity: v.Vector2(400, -200),
-              radius: 30,
-              child: FNodes(
-                children: [
-                  FCircle(radius: 30, color: Colors.orangeAccent),
-                  const FTrailRenderer(
-                    lifetime: 1.5,
-                    startWidth: 25,
-                    endWidth: 0,
-                    startColor: Colors.orangeAccent,
-                    endColor: Colors.transparent,
+                FRigidBody.circle(
+                  key: ValueKey('ball_$_resetKey'),
+                  name: 'TrailBall',
+                  position: v.Vector3(-300, 500, 0),
+                  initialVelocity: v.Vector2(400, -200),
+                  radius: 30,
+                  child: FNodes(
+                    children: [
+                      const FCircle(radius: 30, color: DemoTheme.warning),
+                      FTrailRenderer(
+                        lifetime: _trailLifetime,
+                        startWidth: 25,
+                        endWidth: 0,
+                        startColor: DemoTheme.warning,
+                        endColor: Colors.transparent,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
 
-            FRigidBody.square(
-              name: 'DynamicObstacle',
-              position: v.Vector3(-150, 200, 0),
-              size: 60,
-              initialVelocity: v.Vector2(100, 0),
-              child: const FBox(width: 60, height: 60, color: Colors.redAccent),
-            ),
-            FStaticBody(
-              name: 'LeftWall',
-              position: v.Vector3(-600, 0, 0),
-              width: 40,
-              height: 2000,
-              child: FBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.1)),
-            ),
-            FStaticBody(
-              name: 'RightWall',
-              position: v.Vector3(600, 0, 0),
-              width: 40,
-              height: 2000,
-              child: FBox(width: 40, height: 2000, color: Colors.cyanAccent.withValues(alpha: 0.1)),
-            ),
+                FRigidBody.square(
+                  key: ValueKey('obstacle_$_resetKey'),
+                  name: 'DynamicObstacle',
+                  position: v.Vector3(-150, 200, 0),
+                  size: 60,
+                  initialVelocity: v.Vector2(100, 0),
+                  child: const FBox(width: 60, height: 60, color: DemoTheme.danger),
+                ),
 
-            // Legend
-            Positioned(
-              left: 20,
-              bottom: 40,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _debugInfo('LineRenderer:', 'Pulsing square orbit', Colors.cyanAccent),
-                  _debugInfo('TrailRenderer:', 'Dynamic ball with physics', Colors.orangeAccent),
-                ],
-              ),
-            ),
-          ],
+                FStaticBody(
+                  name: 'LeftWall',
+                  position: v.Vector3(-600, 0, 0),
+                  width: 40,
+                  height: 2000,
+                  child: FBox(width: 40, height: 2000, color: DemoTheme.accent.withValues(alpha: 0.1)),
+                ),
+                FStaticBody(
+                  name: 'RightWall',
+                  position: v.Vector3(600, 0, 0),
+                  width: 40,
+                  height: 2000,
+                  child: FBox(width: 40, height: 2000, color: DemoTheme.accent.withValues(alpha: 0.1)),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  List<Widget> _buildPathSegments() {
-    final List<Widget> segments = [];
-    for (int i = 0; i < _pathPoints.length - 1; i++) {
-      final p1 = _pathPoints[i];
-      final p2 = _pathPoints[i + 1];
-
-      // Segment vector
-      final dx = p2.x - p1.x;
-      final dy = p2.y - p1.y;
-      final distance = sqrt(dx * dx + dy * dy);
-      final angle = atan2(dy, dx);
-
-      // Center of segment
-      final cx = (p1.x + p2.x) / 2;
-      final cy = (p1.y + p2.y) / 2;
-
-      segments.add(
-        FStaticBody(
-          name: 'Segment_$i',
-          position: v.Vector3(cx, cy, 0),
-          rotation: v.Vector3(0, 0, angle),
-          width: distance,
-          height: 10,
-          // No child, just physics
-        ),
-      );
-    }
-    return segments;
+  /// Static bodies following the drawn path. A line renderer is only geometry;
+  /// nothing collides with it.
+  List<Widget> _collisionSegments() {
+    return [
+      for (int i = 0; i < _pathPoints.length - 1; i++)
+        () {
+          final p1 = _pathPoints[i];
+          final p2 = _pathPoints[i + 1];
+          final dx = p2.x - p1.x;
+          final dy = p2.y - p1.y;
+          return FStaticBody(
+            name: 'Segment_$i',
+            position: v.Vector3((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, 0),
+            rotation: v.Vector3(0, 0, atan2(dy, dx)),
+            width: sqrt(dx * dx + dy * dy),
+            height: 10,
+          );
+        }(),
+    ];
   }
 
-  List<v.Vector3> _generateCirclePoints(double radius, int segments) {
+  List<v.Vector3> _circlePoints(double radius, int segments) {
     return List.generate(segments, (i) {
       final angle = (i / segments) * pi * 2;
       return v.Vector3(cos(angle) * radius, sin(angle) * radius, 0);
     });
-  }
-
-  Widget _debugInfo(String label, String value, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          Text(value, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        ],
-      ),
-    );
   }
 }
