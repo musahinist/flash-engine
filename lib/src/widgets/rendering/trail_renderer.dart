@@ -126,8 +126,7 @@ class _FTrailNode extends FNode {
   });
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
     _elapsed += dt;
 
     if (parent == null) return;

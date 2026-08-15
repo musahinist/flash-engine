@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/graph/node.dart';
 import '../../core/systems/tween.dart';
 import '../framework.dart';
+import '../../core/systems/engine.dart';
 
 /// Declarative tween animation builder widget
 /// Automatically handles animation lifecycle with engine tick
@@ -105,17 +106,23 @@ class _FTweenBuilderState<T> extends State<FTweenBuilder<T>> {
     _registerWithEngine();
   }
 
+  FEngine? _engine;
+
   void _registerWithEngine() {
-    final inherited = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
-    final engine = inherited?.engine;
-    if (engine != null) {
-      // Store previous onUpdate and chain ours
-      final previousOnUpdate = engine.onUpdate;
-      engine.onUpdate = () {
-        previousOnUpdate?.call();
-        _tween.update(1 / 60.0);
-      };
-    }
+    final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
+    if (identical(engine, _engine)) return;
+
+    _engine?.removeUpdateListener(_onEngineUpdate);
+    _engine = engine;
+    engine?.addUpdateListener(_onEngineUpdate);
+  }
+
+  void _onEngineUpdate(double dt) => _tween.update(dt);
+
+  @override
+  void dispose() {
+    _engine?.removeUpdateListener(_onEngineUpdate);
+    super.dispose();
   }
 
   @override

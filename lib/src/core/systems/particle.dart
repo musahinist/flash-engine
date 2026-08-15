@@ -488,8 +488,7 @@ class FParticleEmitter extends FNode {
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
     if (_disabled) return;
 
     // Update native gravity in case it changed

@@ -203,9 +203,16 @@ class FNode {
     }
   }
 
-  /// Mark this node and all its descendants as dirty
+  /// Mark this node and all its descendants as dirty.
+  ///
+  /// There used to be an `if (_worldDirty) return;` short-circuit here, which
+  /// looked like a harmless recursion guard but wasn't: `_worldDirty` is only
+  /// cleared when the `worldMatrix` getter runs. A node that is culled or
+  /// invisible never has its matrix read, so the flag stayed set, every later
+  /// transform change bailed out before setting `_localSyncNeeded`, and
+  /// `_syncToNative()` went quiet — the node froze in C++ and reappeared at a
+  /// stale position once it became visible again.
   void setWorldDirty() {
-    if (_worldDirty) return;
     _worldDirty = true;
     _localSyncNeeded = true;
     _cachedWorldPosition = null;
@@ -233,6 +240,13 @@ class FNode {
     return null;
   }
 
+  /// Drives this node and its subtree for one frame.
+  ///
+  /// This is the pump, not the extension point — override [process] instead.
+  /// Subclasses used to override `update` and do their work *after* calling
+  /// `super.update(dt)`, which meant two things went wrong: [processMode] was
+  /// ignored entirely (the work ran even when disabled), and the parent's
+  /// frame work landed after its children had already read it.
   void update(double dt) {
     if (!_canProcess()) return;
 
@@ -245,16 +259,19 @@ class FNode {
   }
 
   bool _canProcess() {
-    if (processMode == ProcessMode.disabled) return false;
-    if (processMode == ProcessMode.always) return true;
-    if (processMode == ProcessMode.inherit) {
-      if (parent != null) return parent!._canProcess();
-      return true; // Root defaults to true
+    switch (processMode) {
+      case ProcessMode.disabled:
+        return false;
+      case ProcessMode.always:
+        // Runs even while the tree is paused.
+        return true;
+      case ProcessMode.paused:
+        // Godot semantics: only runs *while* paused.
+        return _tree?.paused ?? false;
+      case ProcessMode.inherit:
+        if (_tree?.paused ?? false) return false;
+        return parent?._canProcess() ?? true;
     }
-
-    // Manage Paused state via Tree (TODO)
-    // if (tree?.paused == true && processMode == ProcessMode.paused) ...
-    return true;
   }
 
   void render(Canvas canvas, Matrix4 globalTransform) {
@@ -362,6 +379,10 @@ class FNode {
   }
 
   void _syncToNative() {
+    // Catches `transform.position.x += 5` style edits, which bypass the
+    // setters and so never fired onChanged.
+    transform.syncExternalMutations();
+
     if (_nativeNodePtr == null || !_localSyncNeeded) return;
     final n = _nativeNodePtr!.ref;
     final pos = transform.position;

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 import '../../core/systems/verlet.dart';
 import '../framework.dart';
+import '../../core/systems/engine.dart';
 
 /// Declarative widget for creating Verlet rope physics
 class FRope extends StatefulWidget {
@@ -84,20 +85,27 @@ class FRopeState extends State<FRope> {
     _registerWithEngine();
   }
 
-  void _registerWithEngine() {
-    final inherited = context.dependOnInheritedWidgetOfExactType<InheritedFNode>();
-    final engine = inherited?.engine;
+  FEngine? _engine;
 
-    if (engine != null) {
-      final previousOnUpdate = engine.onUpdate;
-      engine.onUpdate = () {
-        previousOnUpdate?.call();
-        final dt = 1 / 60.0;
-        _rope.update(dt);
-        widget.onUpdate?.call(_rope.positions);
-        if (mounted) setState(() {});
-      };
-    }
+  void _registerWithEngine() {
+    final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
+    if (identical(engine, _engine)) return;
+
+    _engine?.removeUpdateListener(_onEngineUpdate);
+    _engine = engine;
+    engine?.addUpdateListener(_onEngineUpdate);
+  }
+
+  void _onEngineUpdate(double dt) {
+    _rope.update(dt);
+    widget.onUpdate?.call(_rope.positions);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _engine?.removeUpdateListener(_onEngineUpdate);
+    super.dispose();
   }
 
   @override

@@ -70,11 +70,15 @@ class FDirectionalLight {
   Color applyToColor(Color baseColor, Vector3 normal, [Matrix4? objectRotation]) {
     final brightness = calculateBrightness(normal, objectRotation);
 
-    return Color.fromARGB(
-      baseColor.a.toInt(),
-      (baseColor.r * brightness).round(),
-      (baseColor.g * brightness).round(),
-      (baseColor.b * brightness).round(),
+    // Color.a/.r/.g/.b are doubles in 0..1, not 0-255 bytes. Feeding them to
+    // Color.fromARGB collapsed every shaded colour to alpha=1 with channels of
+    // 0 or 1 — effectively transparent black.
+    return Color.from(
+      alpha: baseColor.a,
+      red: baseColor.r * brightness,
+      green: baseColor.g * brightness,
+      blue: baseColor.b * brightness,
+      colorSpace: baseColor.colorSpace,
     );
   }
 

@@ -194,7 +194,7 @@ class _TimerDemoState extends State<TimerDemo> {
     engine.scene.addChild(_flashTimer!);
 
     // Update progress in engine loop
-    engine.onUpdate = () {
+    engine.addUpdateListener((dt) {
       if (_spawnTimer != null && _spawnTimer!.isRunning) {
         spawnTimerProgress.value = 1.0 - (_spawnTimer!.timeLeft / _spawnTimer!.waitTime);
       }
@@ -202,7 +202,7 @@ class _TimerDemoState extends State<TimerDemo> {
       if (_flashTimer != null && _flashTimer!.isRunning) {
         flashStatus.value = "⏳ ${_flashTimer!.timeLeft.toStringAsFixed(1)}s remaining";
       }
-    };
+    });
   }
 
   void _restartTimers() {

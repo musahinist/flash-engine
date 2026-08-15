@@ -30,9 +30,10 @@ class _FLabelState extends FNodeWidgetState<FLabel, _FLabelNode> {
   @override
   void applyProperties([FLabel? oldWidget]) {
     super.applyProperties(oldWidget);
-    node.text = widget.text;
-    node.style = widget.style;
-    node.textAlign = widget.textAlign;
+    // Must go through updateLayout, not the fields directly. Writing the
+    // fields left the cached ui.Image untouched, so a label's text never
+    // actually changed on screen after the first frame.
+    node.updateLayout(text: widget.text, style: widget.style, textAlign: widget.textAlign);
   }
 }
 
@@ -70,8 +71,15 @@ class _FLabelNode extends FNode {
     }
   }
 
+  /// Set when text changes while an image is still being rasterised, so the
+  /// change is not silently dropped.
+  bool _relayoutQueued = false;
+
   Future<void> _layout() async {
-    if (_isGenerating) return;
+    if (_isGenerating) {
+      _relayoutQueued = true;
+      return;
+    }
     _isGenerating = true;
 
     _textPainter.text = TextSpan(text: text, style: style);
@@ -83,6 +91,7 @@ class _FLabelNode extends FNode {
 
     if (_lastWidth <= 0 || _lastHeight <= 0) {
       _isGenerating = false;
+      _drainQueuedRelayout();
       return;
     }
 
@@ -98,6 +107,13 @@ class _FLabelNode extends FNode {
     _cachedImage?.dispose();
     _cachedImage = img;
     _isGenerating = false;
+    _drainQueuedRelayout();
+  }
+
+  void _drainQueuedRelayout() {
+    if (!_relayoutQueued) return;
+    _relayoutQueued = false;
+    _layout();
   }
 
   @override

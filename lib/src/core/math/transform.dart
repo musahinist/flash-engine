@@ -37,6 +37,35 @@ class FTransform {
 
   bool get isDirty => _dirty;
 
+  // Snapshot of the values last folded into [_cachedMatrix]. The getters hand
+  // out the live Vector3s, so `node.transform.position.x += 5` mutates state
+  // without going through a setter and without firing [onChanged]. Comparing
+  // against this snapshot catches that; it costs nine double compares on the
+  // frames where a node is actually synced.
+  final Vector3 _syncedPosition = Vector3.all(double.nan);
+  final Vector3 _syncedRotation = Vector3.all(double.nan);
+  final Vector3 _syncedScale = Vector3.all(double.nan);
+
+  /// Picks up in-place edits to the vectors returned by [position], [rotation]
+  /// and [scale], marking the transform dirty and notifying [onChanged].
+  ///
+  /// Prefer the setters or [translate]/[rotateX]/[rotateY]/[rotateZ], which
+  /// notify immediately. This is the safety net for direct field writes.
+  void syncExternalMutations() {
+    if (_position == _syncedPosition && _rotation == _syncedRotation && _scale == _syncedScale) {
+      return;
+    }
+    _syncedPosition.setFrom(_position);
+    _syncedRotation.setFrom(_rotation);
+    _syncedScale.setFrom(_scale);
+    _dirty = true;
+    // Always notify, even if _dirty was already set. _dirty tracks the matrix
+    // cache and is only cleared by the `matrix` getter, which the native
+    // transform path never calls — gating the callback on it would swallow
+    // every in-place edit on a node backed by a native slot.
+    onChanged?.call();
+  }
+
   void translate(double x, double y, [double z = 0]) {
     _position.x += x;
     _position.y += y;

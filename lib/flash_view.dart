@@ -15,7 +15,7 @@ class FView extends StatefulWidget {
   /// allowing Flutter's native gesture system (GestureDetector) to work
   final bool enableInputCapture;
 
-  final VoidCallback? onUpdate;
+  final void Function(double dt)? onUpdate;
 
   /// Called once when the engine is ready, before the first frame.
   /// Use this for one-time scene setup like adding timers, spawners, etc.
@@ -61,8 +61,8 @@ class _FViewState extends State<FView> {
     super.initState();
     engine = FEngine();
     engine.physicsWorld = widget.physicsWorld;
-    engine.onUpdate = () {
-      widget.onUpdate?.call();
+    engine.onUpdate = (dt) {
+      widget.onUpdate?.call(dt);
       final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
       if (now - _lastDebugUpdate > 0.5) {
         int totalNodes = _countNodes(engine.scene);
@@ -91,8 +91,8 @@ class _FViewState extends State<FView> {
       engine.physicsWorld = widget.physicsWorld;
     }
     if (widget.onUpdate != oldWidget.onUpdate) {
-      engine.onUpdate = () {
-        widget.onUpdate?.call();
+      engine.onUpdate = (dt) {
+        widget.onUpdate?.call(dt);
         final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
         if (now - _lastDebugUpdate > 0.5) {
           int totalNodes = _countNodes(engine.scene);

@@ -76,7 +76,7 @@ class _CubeRunnerScreenState extends State<CubeRunnerScreen> {
               _initialized = true;
             }
           },
-          onUpdate: () {
+          onUpdate: (dt) {
             _game.update(1 / 60); // 60fps fixed timestep
           },
           sceneBuilder: (context, elapsed) {

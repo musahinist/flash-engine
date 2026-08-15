@@ -58,7 +58,7 @@ class _InputDemoExampleState extends State<InputDemoExample> {
             ]);
 
             // Update logic
-            engine.onUpdate = () {
+            engine.addUpdateListener((dt) {
               final dt = 1 / 60.0;
               final input = engine.input;
 
@@ -93,7 +93,7 @@ class _InputDemoExampleState extends State<InputDemoExample> {
                   _lastGesture = '🤏 Pinch (${_pinchScale.toStringAsFixed(2)}x)';
                 }
               });
-            };
+            });
 
             return Stack(
               children: [

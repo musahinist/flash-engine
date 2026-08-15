@@ -26,10 +26,10 @@ class _ThreeDAudioDemoState extends State<ThreeDAudioDemo> {
             final engine = engineWidget?.engine;
 
             if (engine != null) {
-              engine.onUpdate = () {
+              engine.addUpdateListener((dt) {
                 _time += 1 / 60.0; // Assuming 60 FPS
                 setState(() {}); // Trigger rebuild to update camera
-              };
+              });
             }
 
             // Camera moves in a circle around the origin

@@ -86,7 +86,7 @@ class _StateMachineDemoExampleState extends State<StateMachineDemoExample> with 
           builder: (context) {
             final engine = context.dependOnInheritedWidgetOfExactType<InheritedFNode>()?.engine;
             if (engine != null) {
-              engine.onUpdate = () => _characterSM.update(1 / 60.0);
+              engine.addUpdateListener((dt) => _characterSM.update(dt));
             }
 
             return Stack(

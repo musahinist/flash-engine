@@ -32,6 +32,10 @@ class FRayCast2D extends FNode {
 
   // --- State ---
   bool _colliding = false;
+
+  /// How far along the ray the hit landed, 0..1. Used for debug drawing in the
+  /// node's local space.
+  double _hitFraction = 1.0;
   v.Vector2 _collisionPoint = v.Vector2.zero();
   v.Vector2 _collisionNormal = v.Vector2.zero();
   BodyId? _colliderBodyId;
@@ -64,16 +68,17 @@ class FRayCast2D extends FNode {
   BodyId? get colliderBodyId => _colliderBodyId;
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
 
     if (!enabled || _world == null) {
       _colliding = false;
       return;
     }
 
-    // Calculate world-space ray start and end
-    final from = v.Vector2(transform.position.x, transform.position.y);
+    // Cast from the node's world position. Using transform.position sent the
+    // ray from the wrong place whenever the node sat under a parent.
+    final origin = worldPosition;
+    final from = v.Vector2(origin.x, origin.y);
     final to = from + targetPosition;
 
     final hit = FPhysicsSystem.rayCast(_world!, from.x, from.y, to.x, to.y);
@@ -85,6 +90,7 @@ class FRayCast2D extends FNode {
       _collisionPoint = v.Vector2(hit.x, hit.y);
       _collisionNormal = v.Vector2(hit.normalX, hit.normalY);
       _colliderBodyId = hit.bodyId;
+      _hitFraction = hit.fraction;
 
       // Emit signal if we just started hitting this body
       if (_previousColliderBodyId != _colliderBodyId) {
@@ -96,6 +102,7 @@ class FRayCast2D extends FNode {
     } else {
       _colliding = false;
       _colliderBodyId = null;
+      _hitFraction = 1.0;
 
       // Emit signal if we just stopped hitting
       if (_previousColliderBodyId != null) {
@@ -105,36 +112,39 @@ class FRayCast2D extends FNode {
   }
 
   @override
-  void render(Canvas canvas, v.Matrix4 globalTransform) {
-    super.render(canvas, globalTransform);
-
+  void draw(Canvas canvas) {
     if (!debugDraw) return;
 
-    final from = Offset(transform.position.x, transform.position.y);
-    final to = from + Offset(targetPosition.x, targetPosition.y);
+    // FPainter has already applied this node's world matrix, so everything
+    // below is in local space. The previous implementation overrode render(),
+    // which nothing calls — the debug ray was never drawn at all.
+    const from = Offset.zero;
+    final to = Offset(targetPosition.x, targetPosition.y);
 
     final paint = Paint()
       ..color = _colliding ? Colors.green : debugColor
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
-    // Draw the ray line
-    if (_colliding) {
-      // Draw to hit point, then a small indicator to target
-      final hitOffset = Offset(_collisionPoint.x, _collisionPoint.y);
-      canvas.drawLine(from, hitOffset, paint);
-
-      // Draw normal at hit point
-      final normalEnd = hitOffset + Offset(_collisionNormal.x * 20, _collisionNormal.y * 20);
-      final normalPaint = Paint()
-        ..color = Colors.yellow
-        ..strokeWidth = 2.0;
-      canvas.drawLine(hitOffset, normalEnd, normalPaint);
-
-      // Draw a circle at hit point
-      canvas.drawCircle(hitOffset, 5, Paint()..color = Colors.green);
-    } else {
+    if (!_colliding) {
       canvas.drawLine(from, to, paint);
+      return;
     }
+
+    // Use the hit fraction rather than the world-space contact point, which
+    // would need converting back out of this node's frame.
+    final hitOffset = to * _hitFraction;
+    canvas.drawLine(from, hitOffset, paint);
+
+    final normalEnd = hitOffset + Offset(_collisionNormal.x * 20, _collisionNormal.y * 20);
+    canvas.drawLine(
+      hitOffset,
+      normalEnd,
+      Paint()
+        ..color = Colors.yellow
+        ..strokeWidth = 2.0,
+    );
+
+    canvas.drawCircle(hitOffset, 5, Paint()..color = Colors.green);
   }
 }

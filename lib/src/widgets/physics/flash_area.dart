@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import '../../core/systems/physics.dart';
 import '../framework.dart';
 
-/// An area that detects collisions with other bodies.
-/// Currently simplified to circular areas in the native core.
+/// A trigger volume that reports when something touches it.
+///
+/// The native solver reports a contact *count* per body, not which body is on
+/// the other side, so the callbacks say "something entered" rather than
+/// identifying the counterpart. Naming the other body needs native support
+/// that does not exist yet.
 class FArea extends FNodeWidget {
   final int shapeType;
   final double width;
   final double height;
-  final void Function(FPhysicsBody)? onCollisionStart;
-  final void Function(FPhysicsBody)? onCollisionEnd;
+
+  /// Called on the frame something starts touching this area.
+  final VoidCallback? onCollisionStart;
+
+  /// Called on the frame nothing is touching this area any more.
+  final VoidCallback? onCollisionEnd;
 
   const FArea({
     super.key,
@@ -57,7 +65,18 @@ class _FAreaState extends FNodeWidgetState<FArea, FPhysicsBody> {
       name: widget.name ?? 'Area',
     );
 
-    // TODO: Implement native collision callbacks for sensors
+    node.collisionEntered.connect(_handleEnter);
+    node.collisionExited.connect(_handleExit);
     return node;
+  }
+
+  void _handleEnter(FPhysicsBody _) => widget.onCollisionStart?.call();
+  void _handleExit(FPhysicsBody _) => widget.onCollisionEnd?.call();
+
+  @override
+  void dispose() {
+    node.collisionEntered.disconnect(_handleEnter);
+    node.collisionExited.disconnect(_handleExit);
+    super.dispose();
   }
 }

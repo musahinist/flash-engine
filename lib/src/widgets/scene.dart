@@ -66,7 +66,7 @@ class FScene extends StatefulWidget {
   final void Function(FEngine engine, v.Vector2 viewport)? onInit;
 
   /// Called every frame.
-  final VoidCallback? onUpdate;
+  final void Function(double dt)? onUpdate;
 
   const FScene({
     super.key,
@@ -113,12 +113,16 @@ class _FSceneState extends State<FScene> {
             );
           }
 
-          // Call onInit once when viewport is available
+          // onInit needs a laid-out viewport, which is only known during
+          // build. Running it inline would mutate state mid-build (and
+          // typically calls setState), so defer it to after this frame.
           if (!_initialized && widget.onInit != null) {
             final viewport = engine.viewportSize;
             if (viewport.x > 0 && viewport.y > 0) {
-              widget.onInit!(engine, viewport);
               _initialized = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) widget.onInit!(engine, viewport);
+              });
             }
           }
 

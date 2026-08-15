@@ -71,7 +71,7 @@ class _SceneManagerDemoExampleState extends State<SceneManagerDemoExample> {
             _initScenes(engine.sceneManager);
 
             // Listen to scene manager changes
-            engine.onUpdate = () => setState(() {});
+            engine.addUpdateListener((dt) => setState(() {}));
 
             return Stack(
               children: [

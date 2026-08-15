@@ -76,8 +76,7 @@ class FTimer extends FNode {
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
 
     if (!_running || _paused) return;
 

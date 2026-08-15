@@ -100,7 +100,7 @@ class _RayCastDemoState extends State<RayCastDemo> {
                   }
 
                   // Input Listener
-                  engine.onUpdate = () {
+                  engine.addUpdateListener((dt) {
                     final input = engine.input;
                     double dx = 0;
                     double dy = 0;
@@ -127,7 +127,7 @@ class _RayCastDemoState extends State<RayCastDemo> {
                     } else if (hitInfoNotifier.value.startsWith('Hit')) {
                       hitInfoNotifier.value = 'None';
                     }
-                  };
+                  });
                 }
                 return const SizedBox.shrink();
               },

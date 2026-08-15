@@ -52,7 +52,27 @@ class FEngine extends ChangeNotifier {
 
   late final Ticker _ticker;
 
-  VoidCallback? onUpdate;
+  /// Per-frame callback owned by the host widget ([FView]).
+  ///
+  /// Receives the real frame delta. Widgets that need their own per-frame work
+  /// must use [addUpdateListener] instead of assigning here — several used to
+  /// "chain" this single slot by capturing the previous value, which leaked
+  /// (never unsubscribed), grew on every didChangeDependencies, and was wiped
+  /// wholesale by FView.didUpdateWidget.
+  void Function(double dt)? onUpdate;
+
+  final List<void Function(double dt)> _updateListeners = [];
+
+  /// Subscribes [listener] to the frame loop. Safe to call from widget state;
+  /// pair with [removeUpdateListener] in `dispose`.
+  void addUpdateListener(void Function(double dt) listener) {
+    _updateListeners.add(listener);
+  }
+
+  /// Unsubscribes a listener added with [addUpdateListener].
+  void removeUpdateListener(void Function(double dt) listener) {
+    _updateListeners.remove(listener);
+  }
   double _lastTime = 0.0;
   int tickerCount = 0;
   double fps = 0.0;
@@ -92,13 +112,13 @@ class FEngine extends ChangeNotifier {
     _ticker.start();
   }
 
+  /// Stops the frame loop and tears down the scene.
+  ///
+  /// Audio is disposed in [dispose], not here — FView calls stop() then
+  /// dispose(), and doing it in both ran audio.dispose() twice.
   void stop() {
     _ticker.stop();
-    // Do NOT dispose audio here if we want to restart?
-    // But stop() is called by Flash.dispose().
-    // We should clean up scene first
-    scene.dispose(); // Stops all audio nodes
-    audio.dispose();
+    scene.dispose();
   }
 
   @override
@@ -134,9 +154,14 @@ class FEngine extends ChangeNotifier {
     // Process the SceneTree (lifecycle updates)
     tree.process(dt);
 
-    physicsWorld?.update(dt);
-    sceneManager.update(dt);
-    tweenManager.update(dt);
+    // Pausing the tree has to pause the simulation with it. These three used
+    // to keep running regardless, so a "paused" game still had physics
+    // settling and tweens finishing underneath the pause menu.
+    if (!tree.paused) {
+      physicsWorld?.update(dt);
+      sceneManager.update(dt);
+      tweenManager.update(dt);
+    }
 
     // Update Native Transforms Hierarchy
     final nativeScenePtr = _nativeScene;
@@ -160,8 +185,11 @@ class FEngine extends ChangeNotifier {
 
     notifyListeners();
 
-    if (onUpdate != null) {
-      onUpdate!();
+    onUpdate?.call(dt);
+
+    // Copy: a listener may remove itself (or another) during the callback.
+    for (final listener in List.of(_updateListeners)) {
+      listener(dt);
     }
   }
 
@@ -226,9 +254,9 @@ class FEngine extends ChangeNotifier {
       }
     }
 
-    // Always recurse into children (unless the node logic explicitly culls children too, which we don't do here)
-    // Note: If !node.visible, we returned early, so children are skipped (correct for visibility graph).
-    // But for culling, we must continue.
+    // Recurse into children. An invisible node returned early above, so its
+    // subtree is skipped with it — hiding a node hides its descendants.
+    // Frustum culling, by contrast, only drops the node itself.
     for (final child in node.children) {
       _collectNodes(child, vpMatrix);
     }

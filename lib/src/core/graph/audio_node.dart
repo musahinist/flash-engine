@@ -87,8 +87,7 @@ class FAudioNode extends FNode {
   bool get isPlaying => _handles.isNotEmpty;
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
 
     if (_system != null && is3D) {
       final pos = worldPosition;

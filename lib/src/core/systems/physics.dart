@@ -245,6 +245,17 @@ class FPhysicsBody extends FNode {
   /// Emitted on every physics update
   final FSignal<FPhysicsBody> physicsProcess = FSignal();
 
+  /// Emitted on the frame this body starts touching something.
+  final FSignal<FPhysicsBody> collisionEntered = FSignal();
+
+  /// Emitted on the frame this body stops touching everything.
+  final FSignal<FPhysicsBody> collisionExited = FSignal();
+
+  bool _wasColliding = false;
+
+  /// Whether the native solver reported contacts for this body last frame.
+  bool get isColliding => _wasColliding;
+
   // Temporary buffers to avoid allocation in sync
   static final Pointer<Float> _posX = calloc<Float>();
   static final Pointer<Float> _posY = calloc<Float>();
@@ -320,8 +331,7 @@ class FPhysicsBody extends FNode {
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
     _syncFromPhysics();
     physicsProcess.emit(this);
   }
@@ -354,10 +364,17 @@ class FPhysicsBody extends FNode {
     transform.position = v.Vector3(_posX.value, _posY.value, 0);
     transform.rotation = v.Vector3(0, 0, rot);
 
-    // Check for collisions (feedback from native core)
-    if (FPhysicsSystem.getCollisionCount(_world, bodyId) > 0) {
+    // Contact feedback from the native core. It reports a count, not the
+    // counterpart body, so enter/exit are derived from the count going
+    // non-zero and back.
+    final touching = FPhysicsSystem.getCollisionCount(_world, bodyId) > 0;
+    if (touching) {
       collision.emit(this);
+      if (!_wasColliding) collisionEntered.emit(this);
+    } else if (_wasColliding) {
+      collisionExited.emit(this);
     }
+    _wasColliding = touching;
   }
 
   @override
@@ -409,8 +426,7 @@ class FSoftBody extends FNode {
   }
 
   @override
-  void update(double dt) {
-    super.update(dt);
+  void process(double dt) {
     _syncFromNative();
   }
 

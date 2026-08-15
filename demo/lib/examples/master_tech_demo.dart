@@ -164,7 +164,7 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
                     gameController.addChild(player);
 
                     // Input Listener override
-                    engine.onUpdate = () {
+                    engine.addUpdateListener((dt) {
                       final input = engine.input;
                       double dx = 0;
                       double dy = 0;
@@ -188,7 +188,7 @@ class _MasterTechDemoState extends State<MasterTechDemo> {
                       } else {
                         player.setVelocity(0, 0); // Stop instantly when input release
                       }
-                    };
+                    });
 
                     // Create Coins
                     final rnd = Random();
